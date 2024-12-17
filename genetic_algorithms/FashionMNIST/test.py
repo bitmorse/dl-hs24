@@ -18,6 +18,7 @@ test_dt = datasets.FashionMNIST(data_path, train=False, download=True, transform
 
 train_p1, train_p2 = split(train_dt, [0, 1, 2, 3, 4]), split(train_dt, [5, 6, 7, 8, 9])
 
+train_loader = torch.utils.data.DataLoader(train_dt, batch_size=batch_size, shuffle=True)
 train_loader_p1 = torch.utils.data.DataLoader(train_p1, batch_size=batch_size, shuffle=True)
 train_loader_p2 = torch.utils.data.DataLoader(train_p2, batch_size=batch_size, shuffle=True)
 test_loader = torch.utils.data.DataLoader(test_dt, batch_size=batch_size, shuffle=False)
@@ -43,4 +44,4 @@ for i in range(4):
     genAlg.add_mutants(net2)
 
 num_generations = 2
-genAlg.evolve(test_loader, num_generations)
+genAlg.evolve(train_loader, test_loader, num_generations, selection_ratio=[0.5, 0.2, 0.2, 0.1])

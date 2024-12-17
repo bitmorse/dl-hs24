@@ -1,6 +1,7 @@
 import torch
 import copy
 import random
+import math
 
 cupy_imported = False
 try :
@@ -10,12 +11,17 @@ except ImportError:
     pass
 
 class GeneticAlgorithmNN:
-    def __init__(self, models, mutation_rate=0.1, crossover_rate=0.5):
+    def __init__(self, models, mutation_rate=0.1, crossover_rate=0.5, model_args=[]):
         self.population = models
         self.mutation_rate = mutation_rate
         self.crossover_rate = crossover_rate
 
+        self.model_class = models[0].__class__
+        self.model_args = model_args
+
     def initialize_population(self, population_size):
+        if len(self.model_args) == 0:
+            return [self.model_class() for _ in range(population_size)]
         return [self.model_class(*self.model_args) for _ in range(population_size)]
 
     def mutate(self, model):
@@ -96,17 +102,55 @@ class GeneticAlgorithmNN:
         parents = random.choices(population, weights=probabilities, k=2)
         return parents
     
-    def evolve(self, test_loader, num_generations):
-        for i in range(num_generations):
-            fitness_values = self.evaluate_population(test_loader)
-            print(f"Generation {i}, Best Fitness: {max(fitness_values)}")
+    def evolve(self, train_loader, test_loader, num_generations, selection_ratio=[0.5, 0.2, 0.2, 0.1]):
+        """
+        selection_ratio: list of 4 floats that sum to 1.0
+        The first element is the ratio of the population that is the children of the previous generation
+        The second element is the ratio of the population that is mutants of the previous generation
+        The third element is the ratio of the population that is the top models of the previous generation
+        The fourth element is the ratio of the population that is new models
 
-            old_population = self.population
+        Notice that the number of generated models is rounded to the greatest smaller integer
+        If the sum of the generated models is less than the population size, the remaining models are generated randomly
+        """
+
+        assert math.isclose(sum(selection_ratio), 1.0), f"The sum of the selection_ratio must be 1.0, got {sum(selection_ratio)}"
+
+        for i in range(num_generations):
+            fitness_values_train = self.evaluate_population(train_loader)
+            print(f"Generation {i}, Best Train Fitness: {max(fitness_values_train)}")
+
+            fitness_values_test = self.evaluate_population(test_loader)
+            print(f"Generation {i}, Best Test Fitness: {max(fitness_values_test)}")
+
+            # old_population = self.population
+            old_population = [ model for _, model in sorted(zip(fitness_values_train, self.population), reverse=True) ]
             self.population = []
 
-            for _ in range(len(old_population)//2):
-                parent1, parent2 = self.select_parents(old_population, fitness_values)
+            # Children
+            num_children = int(selection_ratio[0] * len(old_population)) % 2 == 0
+            if num_children % 2 == 1:
+                num_children -= 1
+            for _ in range(num_children//2):
+                parent1, parent2 = self.select_parents(old_population, fitness_values_train)
                 self.add_children(parent1, parent2)
 
-        best_model = self.population[fitness_values.index(max(fitness_values))]
+            # Mutants
+            num_mutants = int(selection_ratio[1] * len(old_population))
+            for _ in range(num_mutants):
+                model = random.choice(old_population)
+                self.add_mutants(model)
+
+            # Top models
+            num_top_models = int(selection_ratio[2] * len(old_population))
+            self.population.extend(old_population[:num_top_models])
+
+            # New models
+            for _ in range(len(old_population) - len(self.population)):
+                if len(self.model_args) == 0:
+                    self.population.append(self.model_class())
+                else:
+                    self.population.append(self.model_class(*self.model_args))
+
+        best_model = self.population[fitness_values_train.index(max(fitness_values_train))]
         return best_model
