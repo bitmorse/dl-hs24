@@ -8,7 +8,7 @@ This repository contains the code for the course project of the ETHz Deep Learni
 - [ ] Baseline implementation
 - [x] Implementing GA
 - [ ] Parameterize population selection in GA
-- [ ] Implementing SNN
+- [x] Implementing SNN
 
 ### Stage 2
 - [ ] Tuning hyperparameters of GA
