@@ -5,7 +5,10 @@ This repository contains the code for the course project of the ETHz Deep Learni
 ## TODO
 
 ### Stage 1
-- [ ] Baseline implementation
+- [ ] Incremental training session logic with generic call to train any given model.
+- [ ] CF metrics computation and aggregation
+- [ ] Baseline model training inside incremental training WITHOUT replay buffer (i.e. samples from base train set)
+- [ ] Baseline model training inside incremental training WITH replay buffer
 - [x] Implementing GA
 - [x] Parameterize population selection in GA
 - [x] Implementing SNN
@@ -18,11 +21,30 @@ This repository contains the code for the course project of the ETHz Deep Learni
 ### Stage 3
 - [ ] Generalization of results over different datasets
 
-## Development Pipeline
 
+## Assumptions
+We have 1 base train/test.
+
+We fix the model architecture and hyperparameters.
+
+We have N successive training sessions:
+
+- at each training session our incremental dataset only contains 1 (or more) class. 
+- a training session starts at the previous sessions weights.
+- the training session happens with whatever training algorithm (baseline, GA, snn....)
+- the session ends by computing the CF metrics from the paper
+
+Metrics are collected for all sessions and show how fast forgetting happens as new classes are learned.
+
+## References
+- https://ojs.aaai.org/index.php/AAAI/article/download/11651/11510
+
+
+## Development Pipeline
 1. Add desire feature/changes to the TODO list
 2. Create a new branch for the feature/changes
 3. Implement the feature/changes
 4. Create a pull request to merge the changes to the main branch
 5. Review the changes and merge the pull request
 6. Delete the branch
+
