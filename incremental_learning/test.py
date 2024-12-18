@@ -40,7 +40,7 @@ class BaselineTrainingSession(TrainingSessionInterface):
         self.model.eval()
         test_loader = DataLoader(test_dt, batch_size=self.hyperparams['batch_size'], shuffle=False)
         result = self.trainer.test(self.model, test_loader)
-        test_acc = result[0]['test_acc']
+        test_acc = self.model.correct / self.model.total
         return test_acc
     
     def save_model(self, full_file_path: str):
@@ -69,7 +69,7 @@ def main():
     }
     
     incremental_trainer_config = {
-        'replay_base_classes': 1,
+        'replay_buffer_size': 100,
         'training_sessions': 6,
         'base_classes': [0,1,2,3,4],
         'incremental_classes_total': [5,6,7,8,9],

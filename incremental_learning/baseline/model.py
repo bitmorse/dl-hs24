@@ -41,7 +41,8 @@ class LightningANN(L.LightningModule):
         self.model = ANN()
         self.criterion = torch.nn.CrossEntropyLoss()
         self.learning_rate = learning_rate
-        self.test_acc = None
+        self.correct = 0
+        self.total = 0
         
     def training_step(self, batch, batch_idx):
         # Unpack batch
@@ -53,19 +54,17 @@ class LightningANN(L.LightningModule):
 
         return loss
     
-    def test_step(self, batch, batch_idx):
+    def on_test_start(self):
+        self.correct = 0
+        self.total = 0
         
+    def test_step(self, batch, batch_idx):
         images, labels = batch
         out = self.model(images)
-
-        if self.test_acc is None:
-            num_classes = out.size(1)  # infer number of classes from model output
-            self.test_acc = Accuracy(task="multiclass", num_classes=num_classes).to("cuda")
-
-        preds = torch.argmax(out, dim=1)
-        self.test_acc.update(preds, labels)
         
-        self.log("test_acc", self.test_acc.compute(), on_step=False, on_epoch=True, prog_bar=False)
+        _, idx = out.max(1)
+        self.correct += (labels == idx).sum().item()
+        self.total += labels.size(0)
 
 
     def configure_optimizers(self):

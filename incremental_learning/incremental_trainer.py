@@ -140,9 +140,12 @@ class IncrementalTrainer:
             logging.info(f"Finetuning model from checkpoint {starting_checkpoint_path}")
             self.session_trainer.init_model(starting_checkpoint_path)
             
-            # TODO: draw replay data from base_dt
-            replay_dt = None
+            # draw replay data from base_dt
+            replay_indices = np.random.choice(len(base_dt), self.config['replay_buffer_size'], replace=False)
+            replay_dt = torch.utils.data.Subset(base_dt, replay_indices)
+            
             self.session_trainer.fit(incremental_dt, replay_dt)
+        
         else:
             logging.info(f"Training base model.")
             self.session_trainer.fit(base_dt)
