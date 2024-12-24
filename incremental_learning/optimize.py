@@ -11,7 +11,7 @@ from torchvision import transforms
 from torchvision.datasets import MNIST
 from torch.utils.data import DataLoader
 import lightning as L
-
+import optuna
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
 
 from genetic_algorithms.FashionMNIST.ga import GeneticAlgorithmNN
@@ -20,32 +20,31 @@ import pickle
 
 from sessions import GATrainingSession, BaselineTrainingSession
 
+dataset_name = 'FashionMNIST'
+data_path=f'/tmp/{dataset_name}'
+transform = transforms.Compose([
+    transforms.Resize((28, 28)),
+    transforms.Grayscale(),
+    transforms.ToTensor(),
+])
+train_dt = datasets.FashionMNIST(data_path, train=True, download=True, transform=transform)
+test_dt = datasets.FashionMNIST(data_path, train=False, download=True, transform=transform)
 
-def main():
-    dataset_name = 'FashionMNIST'
-    data_path=f'/tmp/{dataset_name}'
-    transform = transforms.Compose([
-        transforms.Resize((28, 28)),
-        transforms.Grayscale(),
-        transforms.ToTensor(),
-    ])
-    train_dt = datasets.FashionMNIST(data_path, train=True, download=True, transform=transform)
-    test_dt = datasets.FashionMNIST(data_path, train=False, download=True, transform=transform)
-    
+def hyperparam_objective(trial):
     hyperparameters_session = {
         'batch_size': 64,
         'num_epochs': 1,
         'lr': 0.001,
         'train_val_ratio': 0.8,
-        'mutation_rate': 0.8,
-        'crossover_rate': 0.5,
-        'selection_ratio': [0.4, 0.3, 0.1, 0.2],#children,mutants,elites,new
-        'num_generations': 20,
-        'initial_population_size': 10
+        'mutation_rate': trial.suggest_float('mutation_rate', 0.1, 0.7),
+        'crossover_rate': trial.suggest_float('crossover_rate', 0.1, 0.5),
+        'selection_ratio': [0.3, 0.3, 0.3, 0.1],#children,mutants,elites,new
+        'num_generations': trial.suggest_int('num_generations', 20, 50),
+        'initial_population_size': trial.suggest_int('initial_population_size', 4, 10),
     }
     
     incremental_trainer_config = {
-        'replay_buffer_size': 1000,
+        'replay_buffer_size':  1000 * trial.suggest_int('replay_buffer_size', 1, 5),
         'training_sessions': 6,
         'base_classes': [0,1,2,3,4],
         'incremental_classes_total': [5,6,7,8,9],
@@ -55,18 +54,22 @@ def main():
     baseline_session = BaselineTrainingSession(hyperparameters_session) #exchange with your own session trainer
     ga_session = GATrainingSession(hyperparameters_session) #exchange with your own session trainer
     
-    #train GA session
-    trainer1 = IncrementalTrainer(ga_session, train_dt, test_dt, 
-                                 "/tmp/checkpoints", incremental_trainer_config)
-    trainer1.train()
-    trainer1.save_metrics()
-    
     #train baseline session
-    trainer2 = IncrementalTrainer(baseline_session, train_dt, test_dt,
+    trainer2 = IncrementalTrainer(ga_session, train_dt, test_dt,
                                     "/tmp/checkpoints", incremental_trainer_config)
     trainer2.train()
-    trainer2.save_metrics()
+    objective = trainer2.get_cf_metric('omega_all')
     
+    return -objective
+
+
+def main():
+    #hyperparameter optimization        
+    study = optuna.create_study(storage="sqlite:///db.sqlite3")
+    study.optimize(hyperparam_objective, n_trials=100)
+
+    print("Best hyperparameters:")
+    print(study.best_params)
     
 if __name__ == "__main__":
     main()
