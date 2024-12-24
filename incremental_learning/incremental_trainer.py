@@ -48,7 +48,9 @@ class IncrementalTrainer:
         logging.info(f"Full Test: {len(full_test_dt)} samples")
         
 
-            
+    def get_cf_metric(self, metric_name):
+        return self.cf_metrics.get(metric_name, None)
+    
     def _compute_cf_metrics(self):
         T = self.config['training_sessions']
         
@@ -131,8 +133,10 @@ class IncrementalTrainer:
                 self.test_metrics['session_classes'].append(incremental_classes)
             
             current_checkpoint = new_checkpoint
-            
-            
+        
+        #compute cf metrics
+        self._compute_cf_metrics()
+
     
     # train a single session
     def train_session(self, base_dt: Dataset, incremental_dt: Dataset, starting_checkpoint_path: str, new_checkpoint_path: str):
@@ -186,11 +190,10 @@ class IncrementalTrainer:
             os.makedirs(f"incremental_trainer_experiments/{self.experiment_name}")
             
         json.dump(self.test_metrics, open(f"incremental_trainer_experiments/{self.experiment_name}/metrics.json", 'w'))
-        
-        self._compute_cf_metrics()
-        
+                
         json.dump(self.cf_metrics, open(f"incremental_trainer_experiments/{self.experiment_name}/cf_metrics.json", 'w'))
         
+        plt.figure()
         #plot alpha_base_sessions, alpha_new_sessions, alpha_all_sessions and save fig
         plt.plot(self.test_metrics['alpha_base_sessions'], label='Alpha Base Sessions')
         plt.plot(self.test_metrics['alpha_new_sessions'], label='Alpha New Sessions')

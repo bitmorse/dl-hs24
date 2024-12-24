@@ -124,7 +124,9 @@ class GeneticAlgorithmNN:
             print(f"Generation {i}, Best Test Fitness: {max(fitness_values_test)}")
 
             # old_population = self.population
-            old_population = [ model for _, model in sorted(zip(fitness_values_train, self.population), reverse=True) ]
+            #old_population = [ model for _, model in sorted(zip(fitness_values_train, self.population), reverse=True) ]
+            old_population = [model for _, model in sorted(zip(fitness_values_train, self.population), key=lambda x: x[0], reverse=True)]
+
             self.population = []
 
             # Children
