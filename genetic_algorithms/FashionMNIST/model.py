@@ -1,9 +1,11 @@
 import torch
 import torch.nn as nn
 import numpy as np
+from tqdm import tqdm
+
 
 class ANN(nn.Module):
-    def __init__(self):
+    def __init__(self, state_dict=None):
         super(ANN, self).__init__()
         self.conv1 = nn.Conv2d(1, 8, 5)
         self.mp1 = nn.MaxPool2d(2)
@@ -17,7 +19,11 @@ class ANN(nn.Module):
         self.acc_threshold = 0.8
         self.reached_threshold = False
         self.steps_to_threshold = 0
-
+        
+        self.origin = "new"
+        if state_dict is not None:
+            self.load_state_dict(state_dict)
+            
     def forward(self, x: torch.Tensor):
         x = self.conv1(x)
         x = self.mp1(x)
@@ -34,13 +40,19 @@ class ANN(nn.Module):
 
 def train_ann(model, train_loader, criterion, optimizer, num_epochs):
     accs = []
-
     model.to("cuda")
     model.train()
     log_softmax = nn.LogSoftmax(dim=-1)
-    
+
     for epoch in range(num_epochs):
-        for i, (images, labels) in enumerate(iter(train_loader)):
+        progress_bar = tqdm(
+            enumerate(train_loader), 
+            total=len(train_loader), 
+            desc=f"Epoch {epoch + 1}/{num_epochs}",
+            unit="batch"
+        )
+        
+        for i, (images, labels) in progress_bar:
             images, labels = images.to("cuda"), labels.to("cuda")
 
             optimizer.zero_grad()
@@ -51,15 +63,12 @@ def train_ann(model, train_loader, criterion, optimizer, num_epochs):
 
             _, idx = out.max(1)
             acc = np.mean((labels == idx).detach().cpu().numpy())
-
             accs.append(acc)
 
-            if i % 25 == 0:
-                print(f"Epoch {epoch}, Iteration {i} \nTrain Loss: {loss_val.item():.2f}")
-                print(f"Accuracy: {acc * 100:.2f}%\n")
+            # Update progress bar description
+            progress_bar.set_postfix({"Loss": f"{loss_val.item():.2f}", "Accuracy": f"{acc * 100:.2f}%"})
 
     model.to("cpu")
-
     return accs
 
 def test_ann(model, test_loader):

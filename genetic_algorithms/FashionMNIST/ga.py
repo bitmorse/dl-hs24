@@ -2,6 +2,8 @@ import torch
 import copy
 import random
 import math
+import torch.multiprocessing as mp
+import torch.nn as nn
 
 cupy_imported = False
 try :
@@ -11,11 +13,14 @@ except ImportError:
     pass
 
 class GeneticAlgorithmNN:
-    def __init__(self, models, mutation_rate=0.1, crossover_rate=0.5, model_args=[]):
+    def __init__(self, models, mutation_scale=0.1, mutation_rate=0.1, crossover_rate=0.5, model_args=[]):
         self.population = models
+        for model in self.population:
+            model.origin = "initial"
+        
         self.mutation_rate = mutation_rate
         self.crossover_rate = crossover_rate
-
+        self.mutation_scale = mutation_scale
         self.model_class = models[0].__class__
         self.model_args = model_args
 
@@ -26,6 +31,7 @@ class GeneticAlgorithmNN:
 
     def mutate(self, model):
         mutated_model = copy.deepcopy(model)
+        mutated_model.origin = "mutant"
         with torch.no_grad():
             for param in mutated_model.parameters():
                 if cupy_imported:
@@ -33,18 +39,20 @@ class GeneticAlgorithmNN:
                     param_cp = cp.asarray(param_data)
 
                     mask = cp.random.rand(*param_cp.shape) < self.mutation_rate
-                    mutation_values = cp.random.normal(loc=0.0, scale=0.1, size=param_cp.shape)
+                    mutation_values = cp.random.normal(loc=0.0, scale=self.mutation_scale, size=param_cp.shape)
                     param_cp[mask] += mutation_values[mask]
 
                     param.data = torch.tensor(cp.asnumpy(param_cp), device=param.device)
                 else:
                     mask = torch.rand_like(param) < self.mutation_rate
-                    mutation_values = torch.normal(mean=0.0, std=0.1, size=param.shape).to(param.device)
+                    mutation_values = torch.normal(mean=0.0, std=self.mutation_scale, size=param.shape).to(param.device)
                     param[mask] += mutation_values[mask]
         return mutated_model
 
     def crossover(self, parent1, parent2):
         child1, child2 = copy.deepcopy(parent1), copy.deepcopy(parent2)
+        child1.origin = "child"
+        child2.origin = "child"
         with torch.no_grad():
             for p1, p2 in zip(child1.parameters(), child2.parameters()):
                 if cupy_imported:
@@ -73,37 +81,83 @@ class GeneticAlgorithmNN:
         child1, child2 = self.crossover(parent1, parent2)
         self.population.extend([child1, child2])
 
+    
     def evaluate_population(self, test_loader):
-        fitness_values = []
-        for model in self.population:
-            model.to("cuda")
+        # Move all models to GPU and put them in evaluation mode
+        batched_population = nn.ModuleList(self.population).to("cuda")
+        for model in batched_population:
             model.eval()
-            
-            total = 0
-            correct = 0
-            with torch.no_grad():
-                for i, (images, labels) in enumerate(iter(test_loader)):
-                    images, labels = images.to("cuda"), labels.to("cuda")
-                    out = model(images)
-                    _, idx = out.max(1)
-                    correct += (labels == idx).sum().item()
-                    total += labels.size(0)
 
-            acc = correct / total
-            fitness_values.append(acc)
+        fitness_values = [0] * len(self.population)
+        sample_counts = [0] * len(self.population)
 
-            model.to("cpu")
+        # Evaluate all models simultaneously
+        with torch.no_grad():
+            for images, labels in test_loader:
+                images, labels = images.to("cuda"), labels.to("cuda")
+
+                # Get predictions for all models
+                outputs = [model(images) for model in batched_population]
+
+                # Calculate accuracy for each model
+                for i, output in enumerate(outputs):
+                    _, preds = output.max(1)
+                    correct = (preds == labels).sum().item()
+                    fitness_values[i] += correct
+                    sample_counts[i] += labels.size(0)
+
+                # Free memory after processing batch
+                del images, labels, outputs
+                torch.cuda.empty_cache()
+
+        # Finalize fitness values (accuracy)
+        fitness_values = [correct / total for correct, total in zip(fitness_values, sample_counts)]
+
+        # Move models back to CPU
+        batched_population.to("cpu")
+        torch.cuda.empty_cache()  # Clear GPU memory
 
         return fitness_values
 
-    def select_parents(self, population, fitness_values):
-        total_fitness = sum(fitness_values)
-        probabilities = [f / total_fitness for f in fitness_values]
-        parents = random.choices(population, weights=probabilities, k=2)
-        return parents
+    def pareto_front_selection(self, population, incremental_fitness, replay_fitness):
+        population_size = len(population)
+        domination_counts = torch.zeros(population_size)
+        dominated_sets = [[] for _ in range(population_size)]
+
+        for i in range(population_size):
+            for j in range(population_size):
+                if i != j:
+                    if (incremental_fitness[i] >= incremental_fitness[j] and
+                        replay_fitness[i] >= replay_fitness[j]) and \
+                        (incremental_fitness[i] > incremental_fitness[j] or
+                         replay_fitness[i] > replay_fitness[j]):
+                        # i dominates j
+                        domination_counts[j] += 1
+                        dominated_sets[i].append(j)
+
+        # select individuals with no dominations, ie pareto front
+        pareto_front = [idx for idx, count in enumerate(domination_counts) if count == 0]
+
+        return pareto_front
     
-    def evolve(self, train_loader, test_loader, num_generations, selection_ratio=[0.5, 0.2, 0.2, 0.1]):
+    def select_parents(self, population, incremental_fitness_values, replay_fitness_values, combined_fitness_values, strategy="combined"):
+        
+        if strategy == "combined":
+            total_fitness = sum(combined_fitness_values)
+            probabilities = [f / total_fitness for f in combined_fitness_values]
+            parents = random.choices(population, weights=probabilities, k=2)
+        elif strategy == "pareto":
+            pareto_front = self.pareto_front_selection(population, incremental_fitness_values, replay_fitness_values)
+            parents = random.choices([population[idx] for idx in pareto_front], k=2)
+        else:
+            raise ValueError(f"Invalid selection strategy: {strategy}")
+        
+        return parents
+        
+    def evolve(self, incremental_train_loader, base_replay_train_loader, num_generations, selection_ratio=[0.5, 0.2, 0.2, 0.1],
+               recall_importance=0.5, parent_selection_strategy="combined", initial_population_size=10):
         """
+        recall_importance: [0,1] float that determines the importance of the ability to remember of base classes
         selection_ratio: list of 4 floats that sum to 1.0
         The first element is the ratio of the population that is the children of the previous generation
         The second element is the ratio of the population that is mutants of the previous generation
@@ -115,44 +169,74 @@ class GeneticAlgorithmNN:
         """
 
         assert math.isclose(sum(selection_ratio), 1.0), f"The sum of the selection_ratio must be 1.0, got {sum(selection_ratio)}"
+        
+        #add initial mutants
+        m=int((initial_population_size*0.8))
+        for i in range(m//2):
+            self.add_mutants(self.population[0])
+            self.add_mutants(self.population[1])
 
+        #fill the rest of the population with base models
+        self.population.extend(self.initialize_population(initial_population_size - len(self.population)))
+        print(f"Initial Population Size: {len(self.population)} with {m} mutants")        
+        
         for i in range(num_generations):
-            fitness_values_train = self.evaluate_population(train_loader)
-            print(f"Generation {i}, Best Train Fitness: {max(fitness_values_train)}")
-
-            fitness_values_test = self.evaluate_population(test_loader)
-            print(f"Generation {i}, Best Test Fitness: {max(fitness_values_test)}")
-
+            fitness_values_incremental = self.evaluate_population(incremental_train_loader)
+            fitness_values_replay = self.evaluate_population(base_replay_train_loader)
+            fitness_values_combined = [(a*(1-recall_importance) + b*recall_importance) for a, b in zip(fitness_values_incremental, fitness_values_replay)]
+            print(f"Generation {i}, Best Fitness Inc,Base,Combined:{max(fitness_values_incremental)},{max(fitness_values_replay)},{max(fitness_values_combined)}")
+            
+            #get indexes of best model in incremental, replay and combined fitness
+            best_incremental_idx = fitness_values_incremental.index(max(fitness_values_incremental))
+            best_replay_idx = fitness_values_replay.index(max(fitness_values_replay))
+            best_combined_idx = fitness_values_combined.index(max(fitness_values_combined))
+            
+            #print origins of best models
+            print(f"Generation {i}, Best Models Origin Inc,Base,Combined: {self.population[best_incremental_idx].origin},{self.population[best_replay_idx].origin},{self.population[best_combined_idx].origin}")
+            
             # old_population = self.population
             #old_population = [ model for _, model in sorted(zip(fitness_values_train, self.population), reverse=True) ]
-            old_population = [model for _, model in sorted(zip(fitness_values_train, self.population), key=lambda x: x[0], reverse=True)]
-
+            old_population = [model for _, model in sorted(zip(fitness_values_combined, self.population), key=lambda x: x[0], reverse=True)]
+            old_population_size = len(old_population)
             self.population = []
 
             # Children
-            num_children = int(selection_ratio[0] * len(old_population)) % 2 == 0
-            if num_children % 2 == 1:
+            num_children = int(selection_ratio[0] * old_population_size)
+            if num_children % 2 == 1: # if odd, decrement to make it even
                 num_children -= 1
             for _ in range(num_children//2):
-                parent1, parent2 = self.select_parents(old_population, fitness_values_train)
+                parent1, parent2 = self.select_parents(old_population, 
+                                                       fitness_values_incremental, 
+                                                       fitness_values_replay,
+                                                       fitness_values_combined,
+                                                       strategy=parent_selection_strategy)
                 self.add_children(parent1, parent2)
-
+            
             # Mutants
-            num_mutants = int(selection_ratio[1] * len(old_population))
+            num_mutants = int(selection_ratio[1] * old_population_size)
             for _ in range(num_mutants):
                 model = random.choice(old_population)
                 self.add_mutants(model)
 
             # Top models
-            num_top_models = int(selection_ratio[2] * len(old_population))
-            self.population.extend(old_population[:num_top_models])
+            num_top_models = int(selection_ratio[2] * old_population_size)
+            for model in old_population[:num_top_models]:
+                model.origin = "top"  # Tag as top model
+                self.population.append(model)
 
             # New models
-            for _ in range(len(old_population) - len(self.population)):
+            num_new_models = old_population_size - len(self.population)
+            for _ in range(num_new_models):
                 if len(self.model_args) == 0:
-                    self.population.append(self.model_class())
+                    new_model = self.model_class()
                 else:
-                    self.population.append(self.model_class(*self.model_args))
+                    new_model = self.model_class(*self.model_args)
+                
+                new_model.origin = "new"
+                self.population.append(new_model)
+                
+            print(f"Generation {i}, Mutants,Children,Top,New: {num_mutants},{num_children},{num_top_models},{num_new_models}")
 
-        best_model = self.population[fitness_values_train.index(max(fitness_values_train))]
+        best_model = self.population[fitness_values_combined.index(max(fitness_values_combined))]
+
         return best_model

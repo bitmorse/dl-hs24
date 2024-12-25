@@ -38,9 +38,11 @@ def hyperparam_objective(trial):
         'train_val_ratio': 0.8,
         'mutation_rate': trial.suggest_float('mutation_rate', 0.1, 0.7),
         'crossover_rate': trial.suggest_float('crossover_rate', 0.1, 0.5),
-        'selection_ratio': [0.3, 0.3, 0.3, 0.1],#children,mutants,elites,new
+        'selection_ratio': [0.5, 0.2, 0.2, 0.1],#children,mutants,elites,new
         'num_generations': trial.suggest_int('num_generations', 20, 50),
         'initial_population_size': trial.suggest_int('initial_population_size', 4, 10),
+        'recall_importance': 0.5,
+        'parent_selection_strategy': "pareto"
     }
     
     incremental_trainer_config = {
@@ -62,14 +64,23 @@ def hyperparam_objective(trial):
     
     return -objective
 
-
-def main():
+def opt_process():
     #hyperparameter optimization        
-    study = optuna.create_study(storage="sqlite:///db.sqlite3")
+    study = optuna.load_study(storage="sqlite:///db.sqlite3", study_name="ga2")
     study.optimize(hyperparam_objective, n_trials=100)
 
     print("Best hyperparameters:")
     print(study.best_params)
+    
+def main():
+    #start n processes each 1 core of cpu
+    import multiprocessing
+    processes = []
+    for i in range(25):
+        p = multiprocessing.Process(target=opt_process)
+        p.start()
+        processes.append(p)
+
     
 if __name__ == "__main__":
     main()
