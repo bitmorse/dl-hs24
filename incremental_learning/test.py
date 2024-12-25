@@ -38,17 +38,18 @@ def main():
         'lr': 0.001,
         'train_val_ratio': 0.8,
         'mutation_rate': 0.8,
-        'mutation_scale': 0.1,
+        'mutation_scale': 0.2,
         'crossover_rate': 0.5,
         'selection_ratio': [0.5, 0.2, 0.2, 0.1],#children,mutants,elites,new
-        'num_generations': 20,
-        'initial_population_size': 100,
+        'num_generations': 10,
+        'initial_population_size': 10,
         'recall_importance': 0.5,
-        'parent_selection_strategy': "pareto"
+        'parent_selection_strategy': "combined",
+        'crossover_strategy': "importance" #none, random, importance
     }
     
     incremental_trainer_config = {
-        'replay_buffer_size': 1000,
+        'replay_buffer_size': 600,
         'training_sessions': 6,
         'base_classes': [0,1,2,3,4],
         'incremental_classes_total': [5,6,7,8,9],

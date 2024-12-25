@@ -13,17 +13,22 @@ except ImportError:
     pass
 
 class GeneticAlgorithmNN:
-    def __init__(self, models, mutation_scale=0.1, mutation_rate=0.1, crossover_rate=0.5, model_args=[]):
+    def __init__(self, models=[], importances=[], mutation_scale=0.1, mutation_rate=0.1, crossover_rate=0.5, crossover_strategy = "random", model_args=[]):
         self.population = models
+        self.importances = importances
+        
         for model in self.population:
             model.origin = "initial"
         
         self.mutation_rate = mutation_rate
         self.crossover_rate = crossover_rate
+        self.crossover_strategy = crossover_strategy
         self.mutation_scale = mutation_scale
         self.model_class = models[0].__class__
         self.model_args = model_args
-
+        
+        assert len(self.population) == len(self.importances), "Models and importances must have the same length"
+    
     def initialize_population(self, population_size):
         if len(self.model_args) == 0:
             return [self.model_class() for _ in range(population_size)]
@@ -49,12 +54,52 @@ class GeneticAlgorithmNN:
                     param[mask] += mutation_values[mask]
         return mutated_model
 
+
     def crossover(self, parent1, parent2):
-        child1, child2 = copy.deepcopy(parent1), copy.deepcopy(parent2)
-        child1.origin = "child"
-        child2.origin = "child"
+        parent1, parent2 = copy.deepcopy(parent1), copy.deepcopy(parent2)
+        parent1.origin = "child"
+        parent2.origin = "child"
+        
+        if self.crossover_strategy == "importance":
+            return self.crossover_importance(parent1, parent2)
+        elif self.crossover_strategy == "random":
+            return self.crossover_random(parent1, parent2)
+        else:
+            return parent1, parent2
+    
+    def crossover_importance(self, parent1, parent2, target_layers=["conv2.weight", "conv2.bias"]):
+        
+        base_importance = self.importances[0]  # Importance scores for the base dataset
+        i = 0  # Counter for weights swapped
+        total_weights = 0  # Counter for total weights in the target layer
+
         with torch.no_grad():
-            for p1, p2 in zip(child1.parameters(), child2.parameters()):
+            for (name1, p1), (name2, p2) in zip(parent1.named_parameters(), parent2.named_parameters()):
+                # Perform crossover only for the target layer
+                if name1 in target_layers and name1 in base_importance:
+                    base_imp = base_importance[name1]
+                    low_base_importance_mask = (base_imp < base_imp.mean()).cpu() # Example threshold: below mean importance
+
+                    # Generate crossover mask for non-critical weights
+                    mask = torch.rand_like(p1) < self.crossover_rate
+                    mask = mask & low_base_importance_mask  # Modify only non-critical weights
+
+                    # Count swapped and total weights
+                    i += torch.sum(mask).item()
+                    total_weights += mask.numel()
+
+                    # Perform crossover using the mask
+                    temp = p1.clone()
+                    p1[mask] = p2[mask]
+                    p2[mask] = temp[mask]
+
+        # Print statistics
+        print(f"Layer: {target_layers}, Total weights: {total_weights}, Swapped weights: {i}")
+        return parent1, parent2
+
+    def crossover_random(self, parent1, parent2):
+        with torch.no_grad():
+            for p1, p2 in zip(parent1.parameters(), parent2.parameters()):
                 if cupy_imported:
                     p1_data, p2_data = p1.data.cpu().numpy(), p2.data.cpu().numpy()
                     p1_cp, p2_cp = cp.asarray(p1_data), cp.asarray(p2_data)
@@ -71,7 +116,7 @@ class GeneticAlgorithmNN:
                     temp = p1.clone()
                     p1[mask] = p2[mask]
                     p2[mask] = temp[mask]
-        return child1, child2
+        return parent1, parent2
     
     def add_mutants(self, model): 
         mutated_model = self.mutate(model)
@@ -178,8 +223,8 @@ class GeneticAlgorithmNN:
 
         #fill the rest of the population with base models
         self.population.extend(self.initialize_population(initial_population_size - len(self.population)))
-        print(f"Initial Population Size: {len(self.population)} with {m} mutants")        
-        
+        print(f"Initial Population Size: {len(self.population)} with {m} mutants")
+        print(f"Parent selection strategy: {parent_selection_strategy}")
         for i in range(num_generations):
             fitness_values_incremental = self.evaluate_population(incremental_train_loader)
             fitness_values_replay = self.evaluate_population(base_replay_train_loader)

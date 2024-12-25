@@ -15,7 +15,7 @@ import lightning as L
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
 
 from genetic_algorithms.FashionMNIST.ga import GeneticAlgorithmNN
-from genetic_algorithms.FashionMNIST.model import ANN, train_ann, test_ann
+from genetic_algorithms.FashionMNIST.model import ANN, train_ann, test_ann, compute_weight_importance
 import pickle
 
 class GATrainingSession(TrainingSessionInterface):
@@ -56,11 +56,16 @@ class GATrainingSession(TrainingSessionInterface):
             optimizerB = torch.optim.Adam(netB.parameters(), lr=self.hyperparams['lr'])
             train_ann(netB, train_loader, self.criterion, optimizerB, 1)
             
+            importance_netA = compute_weight_importance(netA, replay_loader, self.criterion)
+            importance_netB = compute_weight_importance(netB, train_loader, self.criterion)
+            
             ga = GeneticAlgorithmNN([netA, netB], 
+                                    [importance_netA, importance_netB], 
                                     mutation_rate=self.hyperparams['mutation_rate'], 
                                     mutation_scale=self.hyperparams['mutation_scale'], 
                                     crossover_rate= self.hyperparams['crossover_rate'], 
-                                    model_args=[self.base_model.state_dict()]
+                                    crossover_strategy=self.hyperparams['crossover_strategy'],
+                                    model_args=[self.base_model.state_dict()],
                                     )
             
             self.model = ga.evolve(train_loader, replay_loader, self.hyperparams['num_generations'], 

@@ -23,7 +23,7 @@ class ANN(nn.Module):
         self.origin = "new"
         if state_dict is not None:
             self.load_state_dict(state_dict)
-            
+      
     def forward(self, x: torch.Tensor):
         x = self.conv1(x)
         x = self.mp1(x)
@@ -37,6 +37,34 @@ class ANN(nn.Module):
         x = self.fc1(x)
 
         return x
+
+def compute_weight_importance(model, train_loader, criterion):
+    """
+    returns dict where keys are parameter names and values are importance scores.
+    """
+    model.to("cuda")
+    model.eval()
+    importance = {name: torch.zeros_like(param) for name, param in model.named_parameters()}
+
+    for images, labels in train_loader:
+        images, labels = images.to("cuda"), labels.to("cuda")
+        model.zero_grad()
+
+        outputs = model(images)
+        loss = criterion(outputs, labels)
+        loss.backward() 
+
+        #accumulate gradient norms
+        for name, param in model.named_parameters():
+            if param.grad is not None:
+                importance[name] += param.grad.abs()
+
+    #normalize
+    for name in importance:
+        importance[name] /= len(train_loader.dataset)
+
+    model.to("cpu")
+    return importance
 
 def train_ann(model, train_loader, criterion, optimizer, num_epochs):
     accs = []
@@ -87,7 +115,7 @@ def test_ann(model, test_loader):
             total += labels.size(0)
 
     acc = correct / total
-    print(f"Test Accuracy: {acc * 100:.2f}%\n")
+    #print(f"Test Accuracy: {acc * 100:.2f}%\n")
 
     model.to("cpu")
 

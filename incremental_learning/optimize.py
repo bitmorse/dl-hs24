@@ -31,22 +31,28 @@ train_dt = datasets.FashionMNIST(data_path, train=True, download=True, transform
 test_dt = datasets.FashionMNIST(data_path, train=False, download=True, transform=transform)
 
 def hyperparam_objective(trial):
+    
     hyperparameters_session = {
         'batch_size': 64,
         'num_epochs': 1,
         'lr': 0.001,
-        'train_val_ratio': 0.8,
-        'mutation_rate': trial.suggest_float('mutation_rate', 0.1, 0.7),
-        'crossover_rate': trial.suggest_float('crossover_rate', 0.1, 0.5),
+        'mutation_scale': trial.suggest_float('crossover_rate', 0.1, 0.5, step=0.2),
+
+        'mutation_rate': trial.suggest_float('mutation_rate', 0.1, 0.7, step=0.2),
+        'crossover_rate': trial.suggest_float('crossover_rate', 0.1, 0.5, step=0.2),
         'selection_ratio': [0.5, 0.2, 0.2, 0.1],#children,mutants,elites,new
-        'num_generations': trial.suggest_int('num_generations', 20, 50),
-        'initial_population_size': trial.suggest_int('initial_population_size', 4, 10),
-        'recall_importance': 0.5,
-        'parent_selection_strategy': "pareto"
+        'num_generations': trial.suggest_int('num_generations', 40, 200, step=20),
+        'initial_population_size': trial.suggest_int('initial_population_size', 10, 30, step=10),
+        'recall_importance':  trial.suggest_float('recall_importance', 0.4, 0.7, step=0.1),
+        'parent_selection_strategy': trial.suggest_categorical('parent_selection_strategy', ['combined', 'pareto']),
+        'selection_ratio': [0.5, 0.2, 0.2, 0.1],#children,mutants,elites,new
+        'crossover_strategy': trial.suggest_categorical('crossover_strategy', ['none', 'random', 'importance'])
+        #none, random, importance
+        
     }
     
     incremental_trainer_config = {
-        'replay_buffer_size':  1000 * trial.suggest_int('replay_buffer_size', 1, 5),
+        'replay_buffer_size':   trial.suggest_int('replay_buffer_size', 1000, 5000, step=1000),
         'training_sessions': 6,
         'base_classes': [0,1,2,3,4],
         'incremental_classes_total': [5,6,7,8,9],
