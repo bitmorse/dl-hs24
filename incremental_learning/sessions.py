@@ -15,13 +15,14 @@ import lightning as L
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
 
 from genetic_algorithms.FashionMNIST.ga import GeneticAlgorithmNN
-from genetic_algorithms.FashionMNIST.model import ANN, train_ann, test_ann
+from genetic_algorithms.FashionMNIST.model import ANN, train_ann, test_ann, compute_weight_importance
 import pickle
 
 class GATrainingSession(TrainingSessionInterface):
     def __init__(self, hyperparams: dict):
         self.hyperparams = hyperparams
         self.model = None
+        self.base_model = None
         self.criterion = torch.nn.CrossEntropyLoss()
 
     def init_model(self, full_file_path: str): 
@@ -43,28 +44,36 @@ class GATrainingSession(TrainingSessionInterface):
             train_ann(netA, train_loader, self.criterion, optimizerA, 1)
             
             self.model = netA
-
+            self.base_model = netA
         else:
             print("Load model A. Train a new model B (w/ incremental class data). \
                   Then uses B and A in GA initial population. evolution outputs best model C and saves it.")
             
-            train_and_replay_dt = torch.utils.data.ConcatDataset([train_dt, base_replay_dt])
-            train_and_replay_loader = DataLoader(train_and_replay_dt, batch_size=self.hyperparams['batch_size'], shuffle=True)
+            replay_loader = DataLoader(base_replay_dt, batch_size=self.hyperparams['batch_size'], shuffle=True)
 
             netA = self.model
             netB = ANN()
             optimizerB = torch.optim.Adam(netB.parameters(), lr=self.hyperparams['lr'])
             train_ann(netB, train_loader, self.criterion, optimizerB, 1)
-            mr = self.hyperparams['mutation_rate']
-            cr = self.hyperparams['crossover_rate']
-            sr = self.hyperparams['selection_ratio']
-            ga = GeneticAlgorithmNN([netA, netB], mutation_rate=mr, crossover_rate=cr)
-
-            for i in range(self.hyperparams['initial_population_size']//2):
-                ga.add_mutants(netA)
-                ga.add_mutants(netB)
-                
-            self.model = ga.evolve(train_and_replay_loader, train_loader, self.hyperparams['num_generations'], selection_ratio=sr)
+            
+            importance_netA = compute_weight_importance(netA, replay_loader, self.criterion)
+            importance_netB = compute_weight_importance(netB, train_loader, self.criterion)
+            
+            ga = GeneticAlgorithmNN([netA, netB], 
+                                    [importance_netA, importance_netB], 
+                                    mutation_rate=self.hyperparams['mutation_rate'], 
+                                    mutation_scale=self.hyperparams['mutation_scale'], 
+                                    crossover_rate= self.hyperparams['crossover_rate'], 
+                                    crossover_strategy=self.hyperparams['crossover_strategy'],
+                                    model_args=[self.base_model.state_dict()],
+                                    )
+            
+            self.model = ga.evolve(train_loader, replay_loader, self.hyperparams['num_generations'], 
+                                   selection_ratio=self.hyperparams['selection_ratio'],
+                                   recall_importance=self.hyperparams['recall_importance'], 
+                                   parent_selection_strategy=self.hyperparams['parent_selection_strategy'],
+                                   initial_population_size= self.hyperparams['initial_population_size']
+                                   )
         
     
     def test(self, test_dt):

@@ -38,14 +38,19 @@ def main():
         'lr': 0.001,
         'train_val_ratio': 0.8,
         'mutation_rate': 0.8,
+        'mutation_scale': 0.2,
         'crossover_rate': 0.5,
-        'selection_ratio': [0.4, 0.3, 0.1, 0.2],#children,mutants,elites,new
-        'num_generations': 20,
-        'initial_population_size': 10
+        'selection_ratio': [0.5, 0.2, 0.2, 0.1],#children,mutants,elites,new
+        'num_generations': 10,
+        'initial_population_size': 10,
+        'recall_importance': 0.5,
+        'parent_selection_strategy': "combined",
+        'crossover_strategy': "importance" #none, random, importance
     }
     
     incremental_trainer_config = {
-        'replay_buffer_size': 1000,
+        'replay_buffer_size': 300,
+        'incremental_training_size': 300,
         'training_sessions': 6,
         'base_classes': [0,1,2,3,4],
         'incremental_classes_total': [5,6,7,8,9],
@@ -67,6 +72,16 @@ def main():
     trainer2.train()
     trainer2.save_metrics()
     
+    # summarize cf metrics
+    print("Baseline vs GA session metrics")
+    print(f"Omega All [baseline,ga]: {trainer2.get_cf_metric('omega_all')}, {trainer1.get_cf_metric('omega_all')}")
+    print(f"Omega Base [baseline,ga]: {trainer2.get_cf_metric('omega_base')}, {trainer1.get_cf_metric('omega_base')}")
+    print(f"Omega New [baseline,ga]: {trainer2.get_cf_metric('omega_new')}, {trainer1.get_cf_metric('omega_new')}")
+    
+    #baseline session metrics
+    #INFO:root:Omega Base: 0.8416872224963
+    #INFO:root:Omega New: 0.9972
+    #INFO:root:Omega All: 0.7397220851833579
     
 if __name__ == "__main__":
     main()
