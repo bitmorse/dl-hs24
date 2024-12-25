@@ -53,6 +53,8 @@ def hyperparam_objective(trial):
     
     incremental_trainer_config = {
         'replay_buffer_size':   trial.suggest_int('replay_buffer_size', 1000, 5000, step=1000),
+        'incremental_training_size': 300,
+
         'training_sessions': 6,
         'base_classes': [0,1,2,3,4],
         'incremental_classes_total': [5,6,7,8,9],

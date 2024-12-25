@@ -113,6 +113,9 @@ class IncrementalTrainer:
                 incremental_train_dt = self._split(self.full_train_dt, incremental_classes)
                 incremental_test_dt = self._split(self.full_test_dt, incremental_classes)
                 
+                #decimate incremental train_dt to config['incremental_training_size']
+                incremental_train_dt = torch.utils.data.Subset(incremental_train_dt, np.random.choice(len(incremental_train_dt), self.config['incremental_training_size'], replace=False))
+                
                 logging.info(f"Session {session_number} incremental classes {incremental_classes} (num train samples: {len(incremental_train_dt)})")
                 logging.info(f"# of incremental test samples: {len(incremental_test_dt)}")                
                 
