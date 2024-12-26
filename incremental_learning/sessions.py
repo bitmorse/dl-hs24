@@ -143,7 +143,8 @@ class PyGADTrainingSession(TrainingSessionInterface):
                 random_mutation_min_val=self.hyperparams['random_mutation_min_val'],
                 random_mutation_max_val=self.hyperparams['random_mutation_max_val'],
                 fitness_func=fitness_func,
-                on_generation=on_generation
+                on_generation=on_generation,
+                fitness_batch_size=self.hyperparams['fitness_batch_size']
             )
             ga.run()
 

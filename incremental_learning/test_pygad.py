@@ -47,7 +47,8 @@ def main():
         'mutation_percent_genes': 10.0,
         'mutation_by_replacement': False,
         'random_mutation_min_val': -0.1,
-        'random_mutation_max_val': 0.1
+        'random_mutation_max_val': 0.1,
+        'fitness_batch_size': 100
     }
     
     incremental_trainer_config = {
