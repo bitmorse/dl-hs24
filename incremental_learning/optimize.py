@@ -72,12 +72,12 @@ def hyperparam_objective(trial):
     omega_base = trainer2.get_cf_metric('omega_base')
     omega_new = trainer2.get_cf_metric('omega_new')
     
-    objective = -(omega_base - omega_new)^2 - (1-omega_base)^2 - (1-omega_new)^2
-    return objective
+    objective = -(omega_base - omega_new)**2 - (1-omega_base)**2 - (1-omega_new)**2
+    return objective, omega_base, omega_new
 
 def opt_process():
     #hyperparameter optimization
-    study = optuna.create_study(study_name="ga6", storage="sqlite:///db.sqlite3", load_if_exists=True, direction="maximize")
+    study = optuna.create_study(study_name="ga7", storage="sqlite:///db.sqlite3", load_if_exists=True, directions=["maximize", "maximize", "maximize"])
     study.optimize(hyperparam_objective, n_trials=100)
 
     print("Best hyperparameters:")
