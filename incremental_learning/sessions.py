@@ -16,6 +16,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.
 
 from genetic_algorithms.FashionMNIST.ga import GeneticAlgorithmNN
 from genetic_algorithms.FashionMNIST.model import ANN, train_ann, test_ann, compute_weight_importance
+from genetic_algorithms.FashionMNIST.pygad_interface import PyGADNN, init_population, fitness_func, on_generation
 import pickle
 
 class GATrainingSession(TrainingSessionInterface):
@@ -90,7 +91,69 @@ class GATrainingSession(TrainingSessionInterface):
         with open(full_file_path, 'wb') as f:
             pickle.dump(self.model, f)
         
-    
+class PyGADTrainingSession(TrainingSessionInterface):
+    def __init__(self, hyperparams: dict):
+        self.hyperparams = hyperparams
+        self.model = None
+        self.base_model = None
+        self.criterion = torch.nn.CrossEntropyLoss()
+
+    def init_model(self, full_file_path: str): 
+        pass
+
+    def fit(self, train_dt, base_replay_dt=None):
+        train_loader = DataLoader(train_dt, batch_size=self.hyperparams['batch_size'], shuffle=True)
+
+        #if initial model is None, train a new model A and consider it base model
+        if self.model is None:
+            print("Train a base model A. No evolution is performed.")
+            
+            netA = ANN().to("cuda")
+            optimizerA = torch.optim.Adam(netA.parameters(), lr=self.hyperparams['lr'])
+            train_ann(netA, train_loader, self.criterion, optimizerA, 1, gpu2cpu=False)
+            
+            self.model = netA
+            self.base_model = netA
+        else:
+            print("Load model A. Train a new model B (w/ incremental class data). \
+                  Then uses B and A in GA initial population. evolution outputs best model C and saves it.")
+
+            netA = self.model.to("cuda")
+            netB = ANN().to("cuda")
+            optimizerB = torch.optim.Adam(netB.parameters(), lr=self.hyperparams['lr'])
+            train_ann(netB, train_loader, self.criterion, optimizerB, 1, gpu2cpu=False)
+
+            merged_set = torch.utils.data.ConcatDataset([train_dt, base_replay_dt])
+            merged_loader = DataLoader(merged_set, batch_size=len(merged_set), shuffle=False)
+
+            ga = PyGADNN(
+                model=ANN,
+                train_loader=merged_loader,
+                num_generations=self.hyperparams['num_generations'],
+                num_parents_mating=self.hyperparams['num_parents_mating'],
+                initial_population=init_population(self.hyperparams['population_size'], [netA, netB]),
+                sol_per_pop=self.hyperparams['population_size'],
+                parent_selection_type=self.hyperparams['parent_selection_type'],
+                keep_parents=self.hyperparams['keep_parents'],
+                K_tournament=self.hyperparams['K_tournament'],
+                crossover_type=self.hyperparams['crossover_type'],
+                mutation_type=self.hyperparams['mutation_type'],
+                mutation_percent_genes=self.hyperparams['mutation_percent_genes'],
+                mutation_by_replacement=self.hyperparams['mutation_by_replacement'],
+                random_mutation_min_val=self.hyperparams['random_mutation_min_val'],
+                random_mutation_max_val=self.hyperparams['random_mutation_max_val'],
+                fitness_func=fitness_func,
+                on_generation=on_generation
+            )
+            ga.run()
+
+    def test(self, test_dt):
+        test_loader = DataLoader(test_dt, batch_size=self.hyperparams['batch_size'], shuffle=False)
+        accuracy = test_ann(self.model, test_loader, gpu2cpu=False)
+        return accuracy
+
+    def save_model(self, full_file_path: str):
+        pass            
 
 class BaselineTrainingSession(TrainingSessionInterface):
     def __init__(self, hyperparams: dict):
