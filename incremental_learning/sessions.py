@@ -110,7 +110,7 @@ class PyGADTrainingSession(TrainingSessionInterface):
             
             netA = ANN().to("cuda")
             optimizerA = torch.optim.Adam(netA.parameters(), lr=self.hyperparams['lr'])
-            train_ann(netA, train_loader, self.criterion, optimizerA, 1, gpu2cpu=False)
+            train_ann(netA, train_loader, self.criterion, optimizerA, 1, gpu2cpu=False, slurm=self.hyperparams['slurm'])
             
             self.model = netA
             self.base_model = netA
@@ -121,7 +121,7 @@ class PyGADTrainingSession(TrainingSessionInterface):
             netA = self.model.to("cuda")
             netB = ANN().to("cuda")
             optimizerB = torch.optim.Adam(netB.parameters(), lr=self.hyperparams['lr'])
-            train_ann(netB, train_loader, self.criterion, optimizerB, 1, gpu2cpu=False)
+            train_ann(netB, train_loader, self.criterion, optimizerB, 1, gpu2cpu=False, slurm=self.hyperparams['slurm'])
 
             merged_set = torch.utils.data.ConcatDataset([train_dt, base_replay_dt])
             merged_loader = DataLoader(merged_set, batch_size=len(merged_set), shuffle=False)
@@ -147,6 +147,8 @@ class PyGADTrainingSession(TrainingSessionInterface):
                 fitness_batch_size=self.hyperparams['fitness_batch_size']
             )
             ga.run()
+
+            self.model = ga.best_solution_NN()
 
     def test(self, test_dt):
         test_loader = DataLoader(test_dt, batch_size=self.hyperparams['batch_size'], shuffle=False)

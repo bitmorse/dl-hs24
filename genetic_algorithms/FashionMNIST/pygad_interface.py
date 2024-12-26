@@ -58,10 +58,7 @@ def on_generation(ga_instance):
     print(f"Generation = {ga_instance.generations_completed}")
     print(f"Fitness    = {ga_instance.best_solution()[1]}")
 
-    solution, solution_fitness, solution_idx = ga_instance.best_solution()
-    model = ga_instance.model().to("cuda")
-    model_weights = model_weights_as_dict(model, solution)
-    model.load_state_dict(model_weights)
+    model = ga_instance.best_solution_NN()
     print(f"Test with the training set: {test_ann(model, ga_instance.train_loader, gpu2cpu=False):.4f}")
     print()
 
@@ -135,3 +132,10 @@ class PyGADNN(GA):
         pop_fitness = 1.0 / (pop_fitness + 1e-8)
 
         return pop_fitness
+    
+    def best_solution_NN(self):
+        solution, solution_fitness, solution_idx = self.best_solution()
+        model = self.model().to("cuda")
+        model_weights = model_weights_as_dict(model, solution)
+        model.load_state_dict(model_weights)
+        return model

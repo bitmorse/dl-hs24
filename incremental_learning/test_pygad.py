@@ -38,7 +38,7 @@ def main():
         'lr': 0.001,
         'num_generations': 100,
         'num_parents_mating': 5,
-        'population_size': 100,
+        'population_size': 1000,
         'parent_selection_type': "sss",
         'keep_parents': -1,
         'K_tournament': 3,
@@ -48,7 +48,8 @@ def main():
         'mutation_by_replacement': False,
         'random_mutation_min_val': -0.1,
         'random_mutation_max_val': 0.1,
-        'fitness_batch_size': 100
+        'fitness_batch_size': 1000,
+        'slurm': True
     }
     
     incremental_trainer_config = {
