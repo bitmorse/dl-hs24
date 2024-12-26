@@ -36,21 +36,20 @@ def main():
         'batch_size': 64,
         'num_epochs': 1,
         'lr': 0.001,
-        'train_val_ratio': 0.8,
-        'mutation_rate': 0.8,
-        'mutation_scale': 0.2,
-        'crossover_rate': 0.5,
+        'mutation_rate': 0.1,
+        'mutation_scale': 0.1,
+        'crossover_rate': 0.1,
         'selection_ratio': [0.5, 0.2, 0.2, 0.1],#children,mutants,elites,new
-        'num_generations': 10,
-        'initial_population_size': 10,
-        'recall_importance': 0.5,
+        'num_generations': 600,
+        'initial_population_size': 30,
+        'recall_importance': 0.4,
         'parent_selection_strategy': "combined",
-        'crossover_strategy': "importance" #none, random, importance
+        'crossover_strategy': "random" #none, random, importance
     }
     
     incremental_trainer_config = {
-        'replay_buffer_size': 300,
-        'incremental_training_size': 300,
+        'replay_buffer_size': 1000,
+        'incremental_training_size': 1000,
         'training_sessions': 6,
         'base_classes': [0,1,2,3,4],
         'incremental_classes_total': [5,6,7,8,9],

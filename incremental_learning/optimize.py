@@ -41,7 +41,7 @@ def hyperparam_objective(trial):
         'mutation_rate': trial.suggest_float('mutation_rate', 0.1, 0.7, step=0.2),
         'crossover_rate': trial.suggest_float('crossover_rate', 0.1, 0.5, step=0.2),
         'selection_ratio': [0.5, 0.2, 0.2, 0.1],#children,mutants,elites,new
-        'num_generations': trial.suggest_int('num_generations', 40, 200, step=20),
+        'num_generations': trial.suggest_int('num_generations', 40, 70, step=20),
         'initial_population_size': trial.suggest_int('initial_population_size', 10, 30, step=10),
         'recall_importance':  trial.suggest_float('recall_importance', 0.4, 0.7, step=0.1),
         'parent_selection_strategy': trial.suggest_categorical('parent_selection_strategy', ['combined', 'pareto']),
@@ -52,9 +52,8 @@ def hyperparam_objective(trial):
     }
     
     incremental_trainer_config = {
-        'replay_buffer_size':   trial.suggest_int('replay_buffer_size', 1000, 5000, step=1000),
-        'incremental_training_size': 300,
-
+        'replay_buffer_size':   trial.suggest_int('replay_buffer_size', 300, 1000, step=100),
+        'incremental_training_size': trial.suggest_int('replay_buffer_size', 300, 1000, step=100),
         'training_sessions': 6,
         'base_classes': [0,1,2,3,4],
         'incremental_classes_total': [5,6,7,8,9],
@@ -68,13 +67,17 @@ def hyperparam_objective(trial):
     trainer2 = IncrementalTrainer(ga_session, train_dt, test_dt,
                                     "/tmp/checkpoints", incremental_trainer_config)
     trainer2.train()
-    objective = trainer2.get_cf_metric('omega_all')
     
-    return -objective
+    omega_all = trainer2.get_cf_metric('omega_all')
+    omega_base = trainer2.get_cf_metric('omega_base')
+    omega_new = trainer2.get_cf_metric('omega_new')
+    
+    objective = -(omega_base - omega_new)**2 - (1-omega_base)**2 - (1-omega_new)**2
+    return objective, omega_base, omega_new
 
 def opt_process():
-    #hyperparameter optimization        
-    study = optuna.load_study(storage="sqlite:///db.sqlite3", study_name="ga2")
+    #hyperparameter optimization
+    study = optuna.create_study(study_name="ga7", storage="sqlite:///db.sqlite3", load_if_exists=True, directions=["maximize", "maximize", "maximize"])
     study.optimize(hyperparam_objective, n_trials=100)
 
     print("Best hyperparameters:")
