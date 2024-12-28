@@ -62,7 +62,7 @@ def compute_weight_importance(model, train_loader, criterion):
     model.to("cpu")
     return importance
 
-def train_ann(model, train_loader, criterion, optimizer, num_epochs, gpu2cpu=True):
+def train_ann(model, train_loader, criterion, optimizer, num_epochs, gpu2cpu=True, slurm=False):
     accs = []
     if gpu2cpu:
         model.to("cuda")
@@ -70,28 +70,42 @@ def train_ann(model, train_loader, criterion, optimizer, num_epochs, gpu2cpu=Tru
     log_softmax = nn.LogSoftmax(dim=-1)
 
     for epoch in range(num_epochs):
-        progress_bar = tqdm(
-            enumerate(train_loader), 
-            total=len(train_loader), 
-            desc=f"Epoch {epoch + 1}/{num_epochs}",
-            unit="batch"
-        )
+        if not slurm:
+            progress_bar = tqdm(
+                enumerate(train_loader), 
+                total=len(train_loader), 
+                desc=f"Epoch {epoch + 1}/{num_epochs}",
+                unit="batch"
+            )
         
-        for i, (images, labels) in progress_bar:
-            images, labels = images.to("cuda"), labels.to("cuda")
+            for i, (images, labels) in progress_bar:
+                images, labels = images.to("cuda"), labels.to("cuda")
 
-            optimizer.zero_grad()
-            out = model(images)
-            loss_val = criterion(log_softmax(out), labels)
-            loss_val.backward()
-            optimizer.step()
+                optimizer.zero_grad()
+                out = model(images)
+                loss_val = criterion(log_softmax(out), labels)
+                loss_val.backward()
+                optimizer.step()
 
-            _, idx = out.max(1)
-            acc = np.mean((labels == idx).detach().cpu().numpy())
-            accs.append(acc)
+                _, idx = out.max(1)
+                acc = np.mean((labels == idx).detach().cpu().numpy())
+                accs.append(acc)
 
-            # Update progress bar description
-            progress_bar.set_postfix({"Loss": f"{loss_val.item():.2f}", "Accuracy": f"{acc * 100:.2f}%"})
+                # Update progress bar description
+                progress_bar.set_postfix({"Loss": f"{loss_val.item():.2f}", "Accuracy": f"{acc * 100:.2f}%"})
+        else:
+            for i, (images, labels) in enumerate(train_loader):
+                images, labels = images.to("cuda"), labels.to("cuda")
+
+                optimizer.zero_grad()
+                out = model(images)
+                loss_val = criterion(log_softmax(out), labels)
+                loss_val.backward()
+                optimizer.step()
+
+                _, idx = out.max(1)
+                acc = np.mean((labels == idx).detach().cpu().numpy())
+                accs.append(acc)
 
     if gpu2cpu:
         model.to("cpu")
