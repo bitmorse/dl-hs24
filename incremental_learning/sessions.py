@@ -17,7 +17,44 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.
 from genetic_algorithms.FashionMNIST.ga import GeneticAlgorithmNN
 from genetic_algorithms.FashionMNIST.model import ANN, train_ann, test_ann, compute_weight_importance
 from genetic_algorithms.FashionMNIST.pygad_interface import PyGADNN, init_population, fitness_func, on_generation
+from snn.FashionMNIST.model import LightningSNN
 import pickle
+
+class SNNTrainingSession(TrainingSessionInterface):
+    def __init__(self, hyperparams: dict):
+        self.hyperparams = hyperparams
+        self.model = LightningSNN(learning_rate=hyperparams['lr'])
+        self.trainer_params = {
+            'max_epochs':hyperparams['num_epochs'], 
+            'enable_checkpointing':False
+        }
+        self.trainer = L.Trainer(**self.trainer_params)
+    
+    def init_model(self, full_file_path: str):
+        pass
+        self.model = LightningSNN.load_from_checkpoint(full_file_path)
+        self.trainer = L.Trainer(**self.trainer_params) #reset the trainer
+        
+    def fit(self, train_dt, base_replay_dt=None):
+        if base_replay_dt is not None:
+            train_dt = torch.utils.data.ConcatDataset([train_dt, base_replay_dt])
+   
+        train_loader = DataLoader(train_dt, batch_size=self.hyperparams['batch_size'], shuffle=True)
+
+        self.trainer.fit(self.model, train_loader)
+        
+    
+    def test(self, test_dt):
+        self.model.eval()
+        test_loader = DataLoader(test_dt, batch_size=self.hyperparams['batch_size'], shuffle=False)
+        result = self.trainer.test(self.model, test_loader)
+        test_acc = self.model.correct / self.model.total
+        return test_acc
+    
+    def save_model(self, full_file_path: str):
+        print("save model")
+        self.trainer.save_checkpoint(full_file_path, weights_only=True)
+        pass
 
 class GATrainingSession(TrainingSessionInterface):
     def __init__(self, hyperparams: dict):

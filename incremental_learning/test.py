@@ -18,12 +18,12 @@ from genetic_algorithms.FashionMNIST.ga import GeneticAlgorithmNN
 from genetic_algorithms.FashionMNIST.model import ANN, train_ann, test_ann
 import pickle
 
-from sessions import GATrainingSession, BaselineTrainingSession
+from sessions import SNNTrainingSession, GATrainingSession, BaselineTrainingSession
 
 
 def main():
     dataset_name = 'FashionMNIST'
-    data_path=f'/tmp/{dataset_name}'
+    data_path=f'./archive/{dataset_name}'
     transform = transforms.Compose([
         transforms.Resize((28, 28)),
         transforms.Grayscale(),
@@ -46,6 +46,12 @@ def main():
         'parent_selection_strategy': "combined",
         'crossover_strategy': "random" #none, random, importance
     }
+
+    snn_hyperparameters_session = {
+        'batch_size': 64,
+        'num_epochs': 1,
+        'lr': 0.001
+    }
     
     incremental_trainer_config = {
         'replay_buffer_size': 1000,
@@ -55,16 +61,39 @@ def main():
         'incremental_classes_total': [5,6,7,8,9],
         'incremental_classes_per_session': 1
     }
+
+    incremental_trainer_wo_replay_config = {
+        'replay_buffer_size': 0,
+        'incremental_training_size': 1000,
+        'training_sessions': 6,
+        'base_classes': [0,1,2,3,4],
+        'incremental_classes_total': [5,6,7,8,9],
+        'incremental_classes_per_session': 1
+    }
     
     baseline_session = BaselineTrainingSession(hyperparameters_session) #exchange with your own session trainer
+    snn_session = SNNTrainingSession(hyperparameters_session)
     ga_session = GATrainingSession(hyperparameters_session) #exchange with your own session trainer
     
     #train GA session
+    """
     trainer1 = IncrementalTrainer(ga_session, train_dt, test_dt, 
                                  "/tmp/checkpoints", incremental_trainer_config)
     trainer1.train()
     trainer1.save_metrics()
+    """
     
+    #train SNN session
+    trainer1 = IncrementalTrainer(snn_session, train_dt, test_dt, 
+                                 "/tmp/checkpoints", incremental_trainer_config)
+    trainer1.train()
+    trainer1.save_metrics()
+
+    #trainer3 = IncrementalTrainer(snn_session, train_dt, test_dt, 
+    #                             "/tmp/checkpoints", incremental_trainer_wo_replay_config)
+    #trainer3.train()
+    #trainer3.save_metrics()
+
     #train baseline session
     trainer2 = IncrementalTrainer(baseline_session, train_dt, test_dt,
                                     "/tmp/checkpoints", incremental_trainer_config)
@@ -72,10 +101,10 @@ def main():
     trainer2.save_metrics()
     
     # summarize cf metrics
-    print("Baseline vs GA session metrics")
-    print(f"Omega All [baseline,ga]: {trainer2.get_cf_metric('omega_all')}, {trainer1.get_cf_metric('omega_all')}")
-    print(f"Omega Base [baseline,ga]: {trainer2.get_cf_metric('omega_base')}, {trainer1.get_cf_metric('omega_base')}")
-    print(f"Omega New [baseline,ga]: {trainer2.get_cf_metric('omega_new')}, {trainer1.get_cf_metric('omega_new')}")
+    print("Baseline vs SNN session metrics")
+    print(f"Omega All [baseline,snn]: {trainer2.get_cf_metric('omega_all')}, {trainer1.get_cf_metric('omega_all')}")
+    print(f"Omega Base [baseline,snn]: {trainer2.get_cf_metric('omega_base')}, {trainer1.get_cf_metric('omega_base')}")
+    print(f"Omega New [baseline,snn]: {trainer2.get_cf_metric('omega_new')}, {trainer1.get_cf_metric('omega_new')}")
     
     #baseline session metrics
     #INFO:root:Omega Base: 0.8416872224963
