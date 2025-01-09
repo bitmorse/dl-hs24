@@ -16,6 +16,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.
 
 from genetic_algorithms.FashionMNIST.ga import GeneticAlgorithmNN
 from genetic_algorithms.FashionMNIST.model import ANN, train_ann, test_ann
+from snn.FashionMNIST.model import MultiStepSNN
 import pickle
 
 from sessions import GATrainingSession, BaselineTrainingSession, PyGADTrainingSession
@@ -31,8 +32,10 @@ def main():
     ])
     train_dt = datasets.FashionMNIST(data_path, train=True, download=True, transform=transform)
     test_dt = datasets.FashionMNIST(data_path, train=False, download=True, transform=transform)
-    
+
     hyperparameters_session = {
+        # 'model_type': ANN,
+        'model_type': MultiStepSNN,
         'batch_size': 64,
         'num_epochs': 1,
         'lr': 0.001,
@@ -51,41 +54,43 @@ def main():
         'fitness_batch_size': 1000,
         'slurm': True
     }
-    
+
     incremental_trainer_config = {
         'replay_buffer_size': 1000,
         'incremental_training_size': 1000,
         'training_sessions': 6,
         'base_classes': [0,1,2,3,4],
         'incremental_classes_total': [5,6,7,8,9],
-        'incremental_classes_per_session': 1
+        'incremental_classes_per_session': 1,
+        'enable_progress_bar': not hyperparameters_session['slurm'],
     }
-    
+
     baseline_session = BaselineTrainingSession(hyperparameters_session) #exchange with your own session trainer
     ga_session = PyGADTrainingSession(hyperparameters_session) #exchange with your own session trainer
-    
-    #train GA session
+
+    # train GA session
     trainer1 = IncrementalTrainer(ga_session, train_dt, test_dt, 
                                  "/home/zyi/scratch/ETHz/checkpoints", incremental_trainer_config)
     trainer1.train()
     trainer1.save_metrics()
-    
-    #train baseline session
+
+    # train baseline session
     trainer2 = IncrementalTrainer(baseline_session, train_dt, test_dt,
                                     "/home/zyi/scratch/ETHz/checkpoints", incremental_trainer_config)
     trainer2.train()
     trainer2.save_metrics()
-    
+
     # summarize cf metrics
     print("Baseline vs GA session metrics")
     print(f"Omega All [baseline,ga]: {trainer2.get_cf_metric('omega_all')}, {trainer1.get_cf_metric('omega_all')}")
     print(f"Omega Base [baseline,ga]: {trainer2.get_cf_metric('omega_base')}, {trainer1.get_cf_metric('omega_base')}")
     print(f"Omega New [baseline,ga]: {trainer2.get_cf_metric('omega_new')}, {trainer1.get_cf_metric('omega_new')}")
-    
-    #baseline session metrics
-    #INFO:root:Omega Base: 0.8416872224963
-    #INFO:root:Omega New: 0.9972
-    #INFO:root:Omega All: 0.7397220851833579
-    
+
+    # baseline session metrics
+    # INFO:root:Omega Base: 0.8416872224963
+    # INFO:root:Omega New: 0.9972
+    # INFO:root:Omega All: 0.7397220851833579
+
+
 if __name__ == "__main__":
     main()
