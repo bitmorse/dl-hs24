@@ -103,9 +103,9 @@ def run_experiment(experiment_id):
 if __name__ == "__main__":
     
     N_EXPERIMENTS = 10 #number of experiments to run for statistical significance
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
 
     for i in range(N_EXPERIMENTS):
-        timestamp = time.strftime("%Y%m%d-%H%M%S")
         experiment_id = f"experiment_{i}_{timestamp}"
         run_experiment(experiment_id)
 
