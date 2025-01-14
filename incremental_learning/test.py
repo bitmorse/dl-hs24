@@ -11,7 +11,7 @@ from torchvision import transforms
 from torchvision.datasets import MNIST
 from torch.utils.data import DataLoader
 import lightning as L
-
+import time
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
 
 from genetic_algorithms.FashionMNIST.ga import GeneticAlgorithmNN
@@ -21,9 +21,7 @@ import pickle
 from sessions import GATrainingSession, BaselineTrainingSession
 
 
-def main():
-    N_EXPERIMENTS = 10 #number of experiments to run for statistical significance
-    
+def run_experiment(experiment_id):
     hyperparameters_session = {
         'batch_size': 64,
         'num_epochs': 1,
@@ -33,20 +31,20 @@ def main():
         'crossover_rate': 0.1,
         'selection_ratio': [0.5, 0.2, 0.2, 0.1],#children,mutants,elites,new
         'num_generations': 600,
-        'initial_population_size': 30,
+        'initial_population_size': 30, #TODO: try 50
         'recall_importance': 0.4,
         'parent_selection_strategy': "combined",
         'crossover_strategy': "random" #none, random, importance
     }
     
     incremental_trainer_config = {
-        'replay_buffer_size': 1000,
-        'incremental_training_size': 1000,
+        'replay_buffer_size': 1000, #TODO: show how more data makes GA perform worse
+        'incremental_training_size': 1000, #TODO: show how more data makes GA perform worse
         'training_sessions': 6,
         'base_classes': [0,1,2,3,4],
         'incremental_classes_total': [5,6,7,8,9],
         'incremental_classes_per_session': 1,
-        'dataset_name': 'FashionMNIST',
+        'dataset_name': 'FashionMNIST'
     }
     
     data_path=f"/tmp/{incremental_trainer_config['dataset_name']}"
@@ -55,7 +53,6 @@ def main():
         transforms.Grayscale(),
         transforms.ToTensor(),
     ])
-    
     
     # select dataset, note that the model is the same for all datasets currently. CIFAR10 is tranformed to grayscale!
     if incremental_trainer_config['dataset_name'] == 'FashionMNIST':
@@ -69,28 +66,29 @@ def main():
     baseline_session = BaselineTrainingSession(hyperparameters_session) #exchange with your own session trainer
     ga_session = GATrainingSession(hyperparameters_session) #exchange with your own session trainer
     
-    timestamp = int(time.time())
-    for i in range(N_EXPERIMENTS):
-        experiment_id = f"experiment_{i}_{timestamp}"
-        
-        #train GA session
-        trainer1 = IncrementalTrainer(ga_session, train_dt, test_dt, 
-                                    "/tmp/checkpoints", incremental_trainer_config, experiment_id)
-        trainer1.train()
-        trainer1.save_metrics()
-        
-        #train baseline session
-        trainer2 = IncrementalTrainer(baseline_session, train_dt, test_dt,
-                                        "/tmp/checkpoints", incremental_trainer_config, experiment_id)
-        trainer2.train()
-        trainer2.save_metrics()
-        
-        # summarize cf metrics
-        print("Baseline vs GA session metrics")
-        print(f"Omega All [baseline,ga]: {trainer2.get_cf_metric('omega_all')}, {trainer1.get_cf_metric('omega_all')}")
-        print(f"Omega Base [baseline,ga]: {trainer2.get_cf_metric('omega_base')}, {trainer1.get_cf_metric('omega_base')}")
-        print(f"Omega New [baseline,ga]: {trainer2.get_cf_metric('omega_new')}, {trainer1.get_cf_metric('omega_new')}")
     
+    #train baseline session
+    trainer2 = IncrementalTrainer(baseline_session, train_dt, test_dt,
+                                    "/tmp/checkpoints", incremental_trainer_config, 
+                                    experiment_id, alpha_ideal=None)
+    trainer2.train()
+    baseline_alpha_ideal = trainer2.get_cf_metric('alpha_ideal')
+    trainer2.save_metrics()
+    
+    
+    #train GA session, use the same alpha_ideal as the baseline session - needed for comparability!
+    trainer1 = IncrementalTrainer(ga_session, train_dt, test_dt, 
+                                "/tmp/checkpoints", incremental_trainer_config, 
+                                experiment_id, alpha_ideal=baseline_alpha_ideal)
+    trainer1.train()
+    trainer1.save_metrics()
+    
+    # summarize cf metrics
+    print("Baseline vs GA session metrics")
+    print(f"Omega All [baseline,ga]: {trainer2.get_cf_metric('omega_all')}, {trainer1.get_cf_metric('omega_all')}")
+    print(f"Omega Base [baseline,ga]: {trainer2.get_cf_metric('omega_base')}, {trainer1.get_cf_metric('omega_base')}")
+    print(f"Omega New [baseline,ga]: {trainer2.get_cf_metric('omega_new')}, {trainer1.get_cf_metric('omega_new')}")
+
     #baseline session metrics
     #INFO:root:Omega Base: 0.8416872224963
     #INFO:root:Omega New: 0.9972
@@ -103,7 +101,13 @@ def main():
     
     
 if __name__ == "__main__":
-    main()
+    
+    N_EXPERIMENTS = 10 #number of experiments to run for statistical significance
+
+    for i in range(N_EXPERIMENTS):
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        experiment_id = f"experiment_{i}_{timestamp}"
+        run_experiment(experiment_id)
 
 # if __name__ == "__main__":
 #     import cProfile

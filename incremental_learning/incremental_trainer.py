@@ -18,7 +18,8 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 class IncrementalTrainer:
     def __init__(self, session_trainer: TrainingSessionInterface, 
                 full_train_dt: Dataset, full_test_dt: Dataset, 
-                checkpoints_path: str, config: dict, experiment_dir=None) -> None:
+                checkpoints_path: str, config: dict, experiment_dir=None,
+                alpha_ideal=None) -> None:
         self.session_trainer = session_trainer
         self.checkpoints_path = checkpoints_path
         self.experiment_name = f"{session_trainer.__class__.__name__}_{full_train_dt.__class__.__name__}"
@@ -28,6 +29,7 @@ class IncrementalTrainer:
         
         if experiment_dir == None:
             self.experiment_dir = int(time.time())
+            
             
         self.config = config
 
@@ -46,13 +48,18 @@ class IncrementalTrainer:
             'omega_all': 0, # measure retention of prior info AND aquisition of new info
         }
         
+        if alpha_ideal == None:
+            self.alpha_ideal = 0
+            self._compute_alpha_ideal()
+        else:
+            logging.info("Using provided alpha_ideal.")
+            self.alpha_ideal = alpha_ideal
+
         logging.info(f"Experiment name: {self.experiment_name}")
         logging.info("Dataset info:")
         logging.info(f"Full Train: {len(full_train_dt)} samples")
         logging.info(f"Full Test: {len(full_test_dt)} samples")
-        self._compute_alpha_ideal()
         
-
     def get_cf_metric(self, metric_name):
         return self.cf_metrics.get(metric_name, None)
     
