@@ -8,7 +8,7 @@ from torchvision import datasets, transforms
 
 batch_size = 64
 dataset_name = 'FashionMNIST'
-data_path=f'/scratch/zyi/codeSpace/data/{dataset_name}'
+data_path=f'/archive/{dataset_name}'
 transform = transforms.Compose([
     transforms.Resize((28, 28)),
     transforms.Grayscale(),

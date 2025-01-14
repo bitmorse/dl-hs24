@@ -14,12 +14,12 @@ import lightning as L
 import time
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
 
-from genetic_algorithms.FashionMNIST.ga import GeneticAlgorithmNN
-from genetic_algorithms.FashionMNIST.model import ANN, train_ann, test_ann
+from genetic_algorithms.ga import GeneticAlgorithmNN
+from genetic_algorithms.model import ANN, train_ann, test_ann
 import pickle
 
-from sessions import GATrainingSession, BaselineTrainingSession
-
+from sessions import SNNTrainingSession, GATrainingSession, BaselineTrainingSession
+from config import get_datasets, INCREMENTAL_TRAINER_CONFIG
 
 def run_experiment(experiment_id):
     hyperparameters_session = {
@@ -36,32 +36,9 @@ def run_experiment(experiment_id):
         'parent_selection_strategy': "combined",
         'crossover_strategy': "random" #none, random, importance
     }
+
     
-    incremental_trainer_config = {
-        'replay_buffer_size': 1000, #TODO: show how more data makes GA perform worse
-        'incremental_training_size': 1000, #TODO: show how more data makes GA perform worse
-        'training_sessions': 6,
-        'base_classes': [0,1,2,3,4],
-        'incremental_classes_total': [5,6,7,8,9],
-        'incremental_classes_per_session': 1,
-        'dataset_name': 'FashionMNIST'
-    }
-    
-    data_path=f"/tmp/{incremental_trainer_config['dataset_name']}"
-    transform = transforms.Compose([
-        transforms.Resize((28, 28)),
-        transforms.Grayscale(),
-        transforms.ToTensor(),
-    ])
-    
-    # select dataset, note that the model is the same for all datasets currently. CIFAR10 is tranformed to grayscale!
-    if incremental_trainer_config['dataset_name'] == 'FashionMNIST':
-        train_dt = datasets.FashionMNIST(data_path, train=True, download=True, transform=transform)
-        test_dt = datasets.FashionMNIST(data_path, train=False, download=True, transform=transform)
-    elif incremental_trainer_config['dataset_name'] == 'CIFAR10':
-        train_dt = datasets.CIFAR10(data_path, train=True, download=True, transform=transform)
-        test_dt = datasets.CIFAR10(data_path, train=False, download=True, transform=transform)
-    
+    train_dt, test_dt = get_datasets(data_path='/tmp')
     
     baseline_session = BaselineTrainingSession(hyperparameters_session) #exchange with your own session trainer
     ga_session = GATrainingSession(hyperparameters_session) #exchange with your own session trainer
@@ -69,7 +46,7 @@ def run_experiment(experiment_id):
     
     #train baseline session
     trainer2 = IncrementalTrainer(baseline_session, train_dt, test_dt,
-                                    "/tmp/checkpoints", incremental_trainer_config, 
+                                    "/tmp/checkpoints", INCREMENTAL_TRAINER_CONFIG, 
                                     experiment_id, alpha_ideal=None)
     trainer2.train()
     baseline_alpha_ideal = trainer2.get_cf_metric('alpha_ideal')
@@ -78,7 +55,7 @@ def run_experiment(experiment_id):
     
     #train GA session, use the same alpha_ideal as the baseline session - needed for comparability!
     trainer1 = IncrementalTrainer(ga_session, train_dt, test_dt, 
-                                "/tmp/checkpoints", incremental_trainer_config, 
+                                "/tmp/checkpoints", INCREMENTAL_TRAINER_CONFIG, 
                                 experiment_id, alpha_ideal=baseline_alpha_ideal)
     trainer1.train()
     trainer1.save_metrics()

@@ -15,10 +15,6 @@ class ANN(nn.Module):
         self.relu2 = nn.ReLU()
         self.flatten = nn.Flatten()
         self.fc1 = nn.Linear(16*4*4, 10)
-
-        self.acc_threshold = 0.8
-        self.reached_threshold = False
-        self.steps_to_threshold = 0
         
         self.origin = "new"
         if state_dict is not None:
@@ -66,43 +62,60 @@ def compute_weight_importance(model, train_loader, criterion):
     model.to("cpu")
     return importance
 
-def train_ann(model, train_loader, criterion, optimizer, num_epochs):
+def train_ann(model, train_loader, criterion, optimizer, num_epochs, gpu2cpu=True, slurm=False):
     accs = []
-    model.to("cuda")
+    if gpu2cpu:
+        model.to("cuda")
     model.train()
     log_softmax = nn.LogSoftmax(dim=-1)
 
     for epoch in range(num_epochs):
-        progress_bar = tqdm(
-            enumerate(train_loader), 
-            total=len(train_loader), 
-            desc=f"Epoch {epoch + 1}/{num_epochs}",
-            unit="batch"
-        )
+        if not slurm:
+            progress_bar = tqdm(
+                enumerate(train_loader), 
+                total=len(train_loader), 
+                desc=f"Epoch {epoch + 1}/{num_epochs}",
+                unit="batch"
+            )
         
-        for i, (images, labels) in progress_bar:
-            images, labels = images.to("cuda"), labels.to("cuda")
+            for i, (images, labels) in progress_bar:
+                images, labels = images.to("cuda"), labels.to("cuda")
 
-            optimizer.zero_grad()
-            out = model(images)
-            loss_val = criterion(log_softmax(out), labels)
-            loss_val.backward()
-            optimizer.step()
+                optimizer.zero_grad()
+                out = model(images)
+                loss_val = criterion(log_softmax(out), labels)
+                loss_val.backward()
+                optimizer.step()
 
-            _, idx = out.max(1)
-            acc = np.mean((labels == idx).detach().cpu().numpy())
-            accs.append(acc)
+                _, idx = out.max(1)
+                acc = np.mean((labels == idx).detach().cpu().numpy())
+                accs.append(acc)
 
-            # Update progress bar description
-            progress_bar.set_postfix({"Loss": f"{loss_val.item():.2f}", "Accuracy": f"{acc * 100:.2f}%"})
+                # Update progress bar description
+                progress_bar.set_postfix({"Loss": f"{loss_val.item():.2f}", "Accuracy": f"{acc * 100:.2f}%"})
+        else:
+            for i, (images, labels) in enumerate(train_loader):
+                images, labels = images.to("cuda"), labels.to("cuda")
 
-    model.to("cpu")
+                optimizer.zero_grad()
+                out = model(images)
+                loss_val = criterion(log_softmax(out), labels)
+                loss_val.backward()
+                optimizer.step()
+
+                _, idx = out.max(1)
+                acc = np.mean((labels == idx).detach().cpu().numpy())
+                accs.append(acc)
+
+    if gpu2cpu:
+        model.to("cpu")
+
     return accs
 
-def test_ann(model, test_loader):
-    model.to("cuda")
+def test_ann(model, test_loader, gpu2cpu=True):
+    if gpu2cpu:
+        model.to("cuda")
     model.eval()
-    log_softmax = nn.LogSoftmax(dim=-1)
 
     total = 0
     correct = 0
@@ -117,6 +130,7 @@ def test_ann(model, test_loader):
     acc = correct / total
     #print(f"Test Accuracy: {acc * 100:.2f}%\n")
 
-    model.to("cpu")
+    if gpu2cpu:
+        model.to("cpu")
 
     return acc

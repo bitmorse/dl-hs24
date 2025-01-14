@@ -5,13 +5,16 @@ This repository contains the code for the course project of the ETHz Deep Learni
 ## TODO
 
 ### Stage 1
-- [ ] Incremental training session logic with generic call to train any given model.
-- [ ] CF metrics computation and aggregation
-- [ ] Baseline model training inside incremental training WITHOUT replay buffer (i.e. samples from base train set)
-- [ ] Baseline model training inside incremental training WITH replay buffer
+- [x] Incremental training session logic with generic call to train any given model.
+- [x] CF metrics computation and aggregation
+- [x] Baseline model training inside incremental training WITHOUT replay buffer (i.e. samples from base train set)
+- [x] Baseline model training inside incremental training WITH replay buffer
 - [x] Implementing GA
 - [x] Parameterize population selection in GA
 - [x] Implementing SNN
+- [ ] wrap GA with TrainingSessionInterface
+- [ ] wrap SNN with TrainingSessionInterface
+
 
 ### Stage 2
 - [ ] Tuning hyperparameters of GA
