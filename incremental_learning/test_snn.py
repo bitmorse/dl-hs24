@@ -32,21 +32,12 @@ def main():
     train_dt = datasets.FashionMNIST(data_path, train=True, download=True, transform=transform)
     test_dt = datasets.FashionMNIST(data_path, train=False, download=True, transform=transform)
     
-    hyperparameters_session = {
+    snn_hyperparameters_session = {
         'batch_size': 64,
         'num_epochs': 1,
-        'lr': 0.001,
-        'mutation_rate': 0.1,
-        'mutation_scale': 0.1,
-        'crossover_rate': 0.1,
-        'selection_ratio': [0.5, 0.2, 0.2, 0.1],#children,mutants,elites,new
-        'num_generations': 600,
-        'initial_population_size': 30,
-        'recall_importance': 0.4,
-        'parent_selection_strategy': "combined",
-        'crossover_strategy': "random" #none, random, importance
+        'lr': 0.001
     }
-
+    
     incremental_trainer_config = {
         'replay_buffer_size': 1000,
         'incremental_training_size': 1000,
@@ -56,11 +47,21 @@ def main():
         'incremental_classes_per_session': 1
     }
 
-    baseline_session = BaselineTrainingSession(hyperparameters_session) #exchange with your own session trainer
-    ga_session = GATrainingSession(hyperparameters_session) #exchange with your own session trainer
+    incremental_trainer_wo_replay_config = {
+        'replay_buffer_size': 0,
+        'incremental_training_size': 1000,
+        'training_sessions': 6,
+        'base_classes': [0,1,2,3,4],
+        'incremental_classes_total': [5,6,7,8,9],
+        'incremental_classes_per_session': 1
+    }
     
-    #train GA session
-    trainer1 = IncrementalTrainer(ga_session, train_dt, test_dt, 
+    baseline_session = BaselineTrainingSession(snn_hyperparameters_session) #exchange with your own session trainer
+    snn_session = SNNTrainingSession(snn_hyperparameters_session) #exchange with your own session trainer
+    
+    
+    #train SNN session
+    trainer1 = IncrementalTrainer(snn_session, train_dt, test_dt, 
                                  "/tmp/checkpoints", incremental_trainer_config)
     trainer1.train()
     trainer1.save_metrics()
@@ -72,10 +73,10 @@ def main():
     trainer2.save_metrics()
     
     # summarize cf metrics
-    print("Baseline vs GA session metrics")
-    print(f"Omega All [baseline,ga]: {trainer2.get_cf_metric('omega_all')}, {trainer1.get_cf_metric('omega_all')}")
-    print(f"Omega Base [baseline,ga]: {trainer2.get_cf_metric('omega_base')}, {trainer1.get_cf_metric('omega_base')}")
-    print(f"Omega New [baseline,ga]: {trainer2.get_cf_metric('omega_new')}, {trainer1.get_cf_metric('omega_new')}")
+    print("Baseline vs SNN session metrics")
+    print(f"Omega All [baseline,snn]: {trainer2.get_cf_metric('omega_all')}, {trainer1.get_cf_metric('omega_all')}")
+    print(f"Omega Base [baseline,snn]: {trainer2.get_cf_metric('omega_base')}, {trainer1.get_cf_metric('omega_base')}")
+    print(f"Omega New [baseline,snn]: {trainer2.get_cf_metric('omega_new')}, {trainer1.get_cf_metric('omega_new')}")
     
     #baseline session metrics
     #INFO:root:Omega Base: 0.8416872224963
