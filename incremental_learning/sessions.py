@@ -127,28 +127,30 @@ class GATrainingSession(TrainingSessionInterface):
         #pickle self.model to file 
         with open(full_file_path, 'wb') as f:
             pickle.dump(self.model, f)
-        
+
+
 class PyGADTrainingSession(TrainingSessionInterface):
     def __init__(self, hyperparams: dict):
         self.hyperparams = hyperparams
         self.model = None
+        self.model_type = hyperparams['model_type']
         self.base_model = None
         self.criterion = torch.nn.CrossEntropyLoss()
 
-    def init_model(self, full_file_path: str): 
+    def init_model(self, full_file_path: str):
         pass
 
     def fit(self, train_dt, base_replay_dt=None):
         train_loader = DataLoader(train_dt, batch_size=self.hyperparams['batch_size'], shuffle=True)
 
-        #if initial model is None, train a new model A and consider it base model
+        # if initial model is None, train a new model A and consider it base model
         if self.model is None:
             print("Train a base model A. No evolution is performed.")
-            
-            netA = ANN().to("cuda")
+
+            netA = self.model_type().to("cuda")
             optimizerA = torch.optim.Adam(netA.parameters(), lr=self.hyperparams['lr'])
             train_ann(netA, train_loader, self.criterion, optimizerA, 1, gpu2cpu=False, slurm=self.hyperparams['slurm'])
-            
+
             self.model = netA
             self.base_model = netA
         else:
@@ -156,7 +158,7 @@ class PyGADTrainingSession(TrainingSessionInterface):
                   Then uses B and A in GA initial population. evolution outputs best model C and saves it.")
 
             netA = self.model.to("cuda")
-            netB = ANN().to("cuda")
+            netB = self.model_type().to("cuda")
             optimizerB = torch.optim.Adam(netB.parameters(), lr=self.hyperparams['lr'])
             train_ann(netB, train_loader, self.criterion, optimizerB, 1, gpu2cpu=False, slurm=self.hyperparams['slurm'])
 
@@ -164,7 +166,7 @@ class PyGADTrainingSession(TrainingSessionInterface):
             merged_loader = DataLoader(merged_set, batch_size=len(merged_set), shuffle=False)
 
             ga = PyGADNN(
-                model=ANN,
+                model=self.model_type,
                 train_loader=merged_loader,
                 num_generations=self.hyperparams['num_generations'],
                 num_parents_mating=self.hyperparams['num_parents_mating'],
@@ -193,7 +195,8 @@ class PyGADTrainingSession(TrainingSessionInterface):
         return accuracy
 
     def save_model(self, full_file_path: str):
-        pass            
+        pass
+
 
 class BaselineTrainingSession(TrainingSessionInterface):
     def __init__(self, hyperparams: dict):

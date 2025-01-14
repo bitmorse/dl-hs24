@@ -38,7 +38,22 @@ class SNN(nn.Module):
         #x = self.lif3(x)
 
         return x
-    
+
+
+class MultiStepSNN(SNN):
+    def __init__(self):
+        super(MultiStepSNN, self).__init__(surrogate_function=surrogate.PiecewiseLeakyReLU(w=2,c=0.01))
+
+    def forward(self, x: torch.Tensor):
+        out_fr = 0.
+        functional.reset_net(self)
+        encoder = encoding.PoissonEncoder()
+        img = encoder(x).to("cuda")
+        for step in range(self.num_steps):
+            out_fr += super(MultiStepSNN, self).forward(img)
+        return out_fr
+
+
 class LightningSNN(L.LightningModule):
     def __init__(self, learning_rate=0.001):
         super(LightningSNN, self).__init__()
