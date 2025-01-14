@@ -4,6 +4,7 @@ import random
 import math
 import torch.multiprocessing as mp
 import torch.nn as nn
+import time
 
 cupy_imported = False
 try :
@@ -68,33 +69,29 @@ class GeneticAlgorithmNN:
             return parent1, parent2
     
     def crossover_importance(self, parent1, parent2, target_layers=["conv2.weight", "conv2.bias"]):
-        
         base_importance = self.importances[0]  # Importance scores for the base dataset
         i = 0  # Counter for weights swapped
         total_weights = 0  # Counter for total weights in the target layer
 
         with torch.no_grad():
             for (name1, p1), (name2, p2) in zip(parent1.named_parameters(), parent2.named_parameters()):
-                # Perform crossover only for the target layer
+                #ONLY target layer!!
                 if name1 in target_layers and name1 in base_importance:
                     base_imp = base_importance[name1]
-                    low_base_importance_mask = (base_imp < base_imp.mean()).cpu() # Example threshold: below mean importance
+                    low_base_importance_mask = (base_imp < base_imp.mean()).cpu() #TODO
 
-                    # Generate crossover mask for non-critical weights
+                    #changing ONLY non-critical weights
                     mask = torch.rand_like(p1) < self.crossover_rate
-                    mask = mask & low_base_importance_mask  # Modify only non-critical weights
+                    mask = mask & low_base_importance_mask
 
-                    # Count swapped and total weights
-                    i += torch.sum(mask).item()
-                    total_weights += mask.numel()
+                    #i += torch.sum(mask).item()
+                    #total_weights += mask.numel()
 
-                    # Perform crossover using the mask
                     temp = p1.clone()
                     p1[mask] = p2[mask]
                     p2[mask] = temp[mask]
 
-        # Print statistics
-        print(f"Layer: {target_layers}, Total weights: {total_weights}, Swapped weights: {i}")
+        #print(f"Layer: {target_layers}, Total weights: {total_weights}, Swapped weights: {i}")
         return parent1, parent2
 
     def crossover_random(self, parent1, parent2):
@@ -128,7 +125,7 @@ class GeneticAlgorithmNN:
 
     
     def evaluate_population(self, test_loader):
-        # Move all models to GPU and put them in evaluation mode
+        # parallel evaluation
         batched_population = nn.ModuleList(self.population).to("cuda")
         for model in batched_population:
             model.eval()
@@ -136,30 +133,27 @@ class GeneticAlgorithmNN:
         fitness_values = [0] * len(self.population)
         sample_counts = [0] * len(self.population)
 
-        # Evaluate all models simultaneously
         with torch.no_grad():
             for images, labels in test_loader:
                 images, labels = images.to("cuda"), labels.to("cuda")
 
-                # Get predictions for all models
                 outputs = [model(images) for model in batched_population]
-
-                # Calculate accuracy for each model
+                
+                #accuracy calced for each model
                 for i, output in enumerate(outputs):
                     _, preds = output.max(1)
                     correct = (preds == labels).sum().item()
                     fitness_values[i] += correct
                     sample_counts[i] += labels.size(0)
 
-                # Free memory after processing batch
+                #do this otherwise segfault
                 del images, labels, outputs
                 torch.cuda.empty_cache()
 
-        # Finalize fitness values (accuracy)
         fitness_values = [correct / total for correct, total in zip(fitness_values, sample_counts)]
 
-        # Move models back to CPU
-        batched_population.to("cpu")
+        #risk of segfault if not done
+        batched_population.to("cpu") # required otherwise segfault
         torch.cuda.empty_cache()  # Clear GPU memory
 
         return fitness_values
@@ -226,10 +220,11 @@ class GeneticAlgorithmNN:
         print(f"Initial Population Size: {len(self.population)} with {m} mutants")
         print(f"Parent selection strategy: {parent_selection_strategy}")
         for i in range(num_generations):
+            start_time = time.time()
             fitness_values_incremental = self.evaluate_population(incremental_train_loader)
             fitness_values_replay = self.evaluate_population(base_replay_train_loader)
             fitness_values_combined = [(a*(1-recall_importance) + b*recall_importance) for a, b in zip(fitness_values_incremental, fitness_values_replay)]
-            print(f"Generation {i}, Best Fitness Inc,Base,Combined:{max(fitness_values_incremental)},{max(fitness_values_replay)},{max(fitness_values_combined)}")
+            #print(f"Generation {i}, Best Fitness Inc,Base,Combined:{max(fitness_values_incremental)},{max(fitness_values_replay)},{max(fitness_values_combined)}")
             
             #get indexes of best model in incremental, replay and combined fitness
             best_incremental_idx = fitness_values_incremental.index(max(fitness_values_incremental))
@@ -237,7 +232,7 @@ class GeneticAlgorithmNN:
             best_combined_idx = fitness_values_combined.index(max(fitness_values_combined))
             
             #print origins of best models
-            print(f"Generation {i}, Best Models Origin Inc,Base,Combined: {self.population[best_incremental_idx].origin},{self.population[best_replay_idx].origin},{self.population[best_combined_idx].origin}")
+            #print(f"Generation {i}, Best Models Origin Inc,Base,Combined: {self.population[best_incremental_idx].origin},{self.population[best_replay_idx].origin},{self.population[best_combined_idx].origin}")
             
             # old_population = self.population
             #old_population = [ model for _, model in sorted(zip(fitness_values_train, self.population), reverse=True) ]
@@ -280,7 +275,8 @@ class GeneticAlgorithmNN:
                 new_model.origin = "new"
                 self.population.append(new_model)
                 
-            print(f"Generation {i}, Mutants,Children,Top,New: {num_mutants},{num_children},{num_top_models},{num_new_models}")
+            #print(f"Generation {i}, Mutants,Children,Top,New: {num_mutants},{num_children},{num_top_models},{num_new_models}")
+            print(f"Generation {i} time", round(time.time() - start_time,2))
 
         best_model = self.population[fitness_values_combined.index(max(fitness_values_combined))]
 

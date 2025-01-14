@@ -22,15 +22,7 @@ from sessions import GATrainingSession, BaselineTrainingSession
 
 
 def main():
-    dataset_name = 'FashionMNIST'
-    data_path=f'/tmp/{dataset_name}'
-    transform = transforms.Compose([
-        transforms.Resize((28, 28)),
-        transforms.Grayscale(),
-        transforms.ToTensor(),
-    ])
-    train_dt = datasets.FashionMNIST(data_path, train=True, download=True, transform=transform)
-    test_dt = datasets.FashionMNIST(data_path, train=False, download=True, transform=transform)
+    N_EXPERIMENTS = 10 #number of experiments to run for statistical significance
     
     hyperparameters_session = {
         'batch_size': 64,
@@ -53,34 +45,75 @@ def main():
         'training_sessions': 6,
         'base_classes': [0,1,2,3,4],
         'incremental_classes_total': [5,6,7,8,9],
-        'incremental_classes_per_session': 1
+        'incremental_classes_per_session': 1,
+        'dataset_name': 'FashionMNIST',
     }
+    
+    data_path=f"/tmp/{incremental_trainer_config['dataset_name']}"
+    transform = transforms.Compose([
+        transforms.Resize((28, 28)),
+        transforms.Grayscale(),
+        transforms.ToTensor(),
+    ])
+    
+    
+    # select dataset, note that the model is the same for all datasets currently. CIFAR10 is tranformed to grayscale!
+    if incremental_trainer_config['dataset_name'] == 'FashionMNIST':
+        train_dt = datasets.FashionMNIST(data_path, train=True, download=True, transform=transform)
+        test_dt = datasets.FashionMNIST(data_path, train=False, download=True, transform=transform)
+    elif incremental_trainer_config['dataset_name'] == 'CIFAR10':
+        train_dt = datasets.CIFAR10(data_path, train=True, download=True, transform=transform)
+        test_dt = datasets.CIFAR10(data_path, train=False, download=True, transform=transform)
+    
     
     baseline_session = BaselineTrainingSession(hyperparameters_session) #exchange with your own session trainer
     ga_session = GATrainingSession(hyperparameters_session) #exchange with your own session trainer
     
-    #train GA session
-    trainer1 = IncrementalTrainer(ga_session, train_dt, test_dt, 
-                                 "/tmp/checkpoints", incremental_trainer_config)
-    trainer1.train()
-    trainer1.save_metrics()
-    
-    #train baseline session
-    trainer2 = IncrementalTrainer(baseline_session, train_dt, test_dt,
-                                    "/tmp/checkpoints", incremental_trainer_config)
-    trainer2.train()
-    trainer2.save_metrics()
-    
-    # summarize cf metrics
-    print("Baseline vs GA session metrics")
-    print(f"Omega All [baseline,ga]: {trainer2.get_cf_metric('omega_all')}, {trainer1.get_cf_metric('omega_all')}")
-    print(f"Omega Base [baseline,ga]: {trainer2.get_cf_metric('omega_base')}, {trainer1.get_cf_metric('omega_base')}")
-    print(f"Omega New [baseline,ga]: {trainer2.get_cf_metric('omega_new')}, {trainer1.get_cf_metric('omega_new')}")
+    timestamp = int(time.time())
+    for i in range(N_EXPERIMENTS):
+        experiment_id = f"experiment_{i}_{timestamp}"
+        
+        #train GA session
+        trainer1 = IncrementalTrainer(ga_session, train_dt, test_dt, 
+                                    "/tmp/checkpoints", incremental_trainer_config, experiment_id)
+        trainer1.train()
+        trainer1.save_metrics()
+        
+        #train baseline session
+        trainer2 = IncrementalTrainer(baseline_session, train_dt, test_dt,
+                                        "/tmp/checkpoints", incremental_trainer_config, experiment_id)
+        trainer2.train()
+        trainer2.save_metrics()
+        
+        # summarize cf metrics
+        print("Baseline vs GA session metrics")
+        print(f"Omega All [baseline,ga]: {trainer2.get_cf_metric('omega_all')}, {trainer1.get_cf_metric('omega_all')}")
+        print(f"Omega Base [baseline,ga]: {trainer2.get_cf_metric('omega_base')}, {trainer1.get_cf_metric('omega_base')}")
+        print(f"Omega New [baseline,ga]: {trainer2.get_cf_metric('omega_new')}, {trainer1.get_cf_metric('omega_new')}")
     
     #baseline session metrics
     #INFO:root:Omega Base: 0.8416872224963
     #INFO:root:Omega New: 0.9972
     #INFO:root:Omega All: 0.7397220851833579
     
+    #14jan 5pm before fix of alpha_all and alpha_ideal
+    #Omega All [baseline,ga]: 0.7226509123060847, 0.8539569522874212
+    #Omega Base [baseline,ga]: 0.9185435254400771, 0.9855143628774858
+    #Omega New [baseline,ga]: 0.6164, 0.9743999999999999
+    
+    
 if __name__ == "__main__":
     main()
+
+# if __name__ == "__main__":
+#     import cProfile
+#     import pstats
+    
+#     profiler = cProfile.Profile()
+#     profiler.enable()
+    
+#     main()
+    
+#     profiler.disable()
+#     stats = pstats.Stats(profiler).sort_stats('cumtime')
+#     stats.print_stats(20)

@@ -24,7 +24,10 @@ class GATrainingSession(TrainingSessionInterface):
         self.model = None
         self.base_model = None
         self.criterion = torch.nn.CrossEntropyLoss()
-
+        self.num_workers = 8
+        self.pin_memory = True
+        self.persistent_workers = True
+    
     def init_model(self, full_file_path: str): 
         return
         #load pickle self.model from file 
@@ -33,7 +36,7 @@ class GATrainingSession(TrainingSessionInterface):
             
         
     def fit(self, train_dt, base_replay_dt=None):
-        train_loader = DataLoader(train_dt, batch_size=self.hyperparams['batch_size'], shuffle=True)
+        train_loader = DataLoader(train_dt, batch_size=self.hyperparams['batch_size'], shuffle=True, num_workers=self.num_workers, pin_memory=self.pin_memory, persistent_workers=self.persistent_workers)
 
         #if initial model is None, train a new model A and consider it base model
         if self.model is None:
@@ -49,7 +52,7 @@ class GATrainingSession(TrainingSessionInterface):
             print("Load model A. Train a new model B (w/ incremental class data). \
                   Then uses B and A in GA initial population. evolution outputs best model C and saves it.")
             
-            replay_loader = DataLoader(base_replay_dt, batch_size=self.hyperparams['batch_size'], shuffle=True)
+            replay_loader = DataLoader(base_replay_dt, batch_size=self.hyperparams['batch_size'], shuffle=True, num_workers=self.num_workers, pin_memory=self.pin_memory, persistent_workers=self.persistent_workers)
 
             netA = self.model
             netB = ANN()
@@ -77,7 +80,7 @@ class GATrainingSession(TrainingSessionInterface):
         
     
     def test(self, test_dt):
-        test_loader = DataLoader(test_dt, batch_size=self.hyperparams['batch_size'], shuffle=False)
+        test_loader = DataLoader(test_dt, batch_size=self.hyperparams['batch_size'], shuffle=False, num_workers=self.num_workers, pin_memory=self.pin_memory, persistent_workers=self.persistent_workers)
         accuracy = test_ann(self.model, test_loader)
         return accuracy
     
@@ -101,6 +104,9 @@ class BaselineTrainingSession(TrainingSessionInterface):
             'enable_checkpointing':False
         }
         self.trainer = L.Trainer(**self.trainer_params)
+        self.num_workers = 8
+        self.pin_memory = True
+        self.persistent_workers = True
     
     def init_model(self, full_file_path: str):
         self.model = LightningANN.load_from_checkpoint(full_file_path)
@@ -110,14 +116,14 @@ class BaselineTrainingSession(TrainingSessionInterface):
         if base_replay_dt is not None:
             train_dt = torch.utils.data.ConcatDataset([train_dt, base_replay_dt])
    
-        train_loader = DataLoader(train_dt, batch_size=self.hyperparams['batch_size'], shuffle=True)
+        train_loader = DataLoader(train_dt, batch_size=self.hyperparams['batch_size'], shuffle=True, num_workers=self.num_workers, pin_memory=self.pin_memory, persistent_workers=self.persistent_workers)
 
         self.trainer.fit(self.model, train_loader)
         
     
     def test(self, test_dt):
         self.model.eval()
-        test_loader = DataLoader(test_dt, batch_size=self.hyperparams['batch_size'], shuffle=False)
+        test_loader = DataLoader(test_dt, batch_size=self.hyperparams['batch_size'], shuffle=False, num_workers=self.num_workers, pin_memory=self.pin_memory, persistent_workers=self.persistent_workers)
         result = self.trainer.test(self.model, test_loader)
         test_acc = self.model.correct / self.model.total
         return test_acc
