@@ -14,8 +14,8 @@ import lightning as L
 import optuna
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
 
-from genetic_algorithms.FashionMNIST.ga import GeneticAlgorithmNN
-from genetic_algorithms.FashionMNIST.model import ANN, train_ann, test_ann
+from genetic_algorithms.ga import GeneticAlgorithmNN
+from genetic_algorithms.model import ANN, train_ann, test_ann
 import pickle
 
 from sessions import GATrainingSession, BaselineTrainingSession
