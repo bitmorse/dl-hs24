@@ -14,9 +14,9 @@ import lightning as L
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
 
-from genetic_algorithms.FashionMNIST.ga import GeneticAlgorithmNN
-from genetic_algorithms.FashionMNIST.model import ANN, train_ann, test_ann, compute_weight_importance
-from genetic_algorithms.FashionMNIST.pygad_interface import PyGADNN, init_population, fitness_func, on_generation
+from genetic_algorithms.ga import GeneticAlgorithmNN
+from genetic_algorithms.model import ANN, train_ann, test_ann, compute_weight_importance
+from genetic_algorithms.pygad_interface import PyGADNN, init_population, fitness_func, on_generation
 from snn.FashionMNIST.model import LightningSNN
 import pickle
 

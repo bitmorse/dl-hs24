@@ -1,7 +1,7 @@
 from pygad import GA
 import torch
 import numpy as np
-from genetic_algorithms.FashionMNIST.model import test_ann
+from genetic_algorithms.model import test_ann
 
 # Convert weights and biases to a 1D array.
 def model_weights_as_vector(model):

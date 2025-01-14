@@ -1,5 +1,7 @@
-from data import split, select
-from model import ANN, train_ann, test_ann
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir)))
+from genetic_algorithms.data import split, select
+from genetic_algorithms.model import ANN, train_ann, test_ann
 
 import torch
 from torchvision import datasets, transforms
