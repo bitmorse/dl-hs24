@@ -40,7 +40,7 @@ def run_experiment(experiment_id):
         'batch_size': 64,
         'num_epochs': 1,
         'lr': 0.001,
-        'num_generations': 100,
+        'num_generations': 60,
         'num_parents_mating': 5,
         'population_size': 1000,
         'parent_selection_type': "sss",
