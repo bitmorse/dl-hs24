@@ -99,5 +99,5 @@ if __name__ == "__main__":
     timestamp = time.strftime("%Y%m%d-%H%M%S")
 
     for i in range(N_EXPERIMENTS):
-        experiment_id = f"experiment_pygad_mlp_{i}_{timestamp}"
+        experiment_id = f"experiment_pygad_cifar_{i}_{timestamp}"
         run_experiment(experiment_id)
