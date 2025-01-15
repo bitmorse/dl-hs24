@@ -9,15 +9,16 @@ from torch import nn
 import torch.nn.functional as F
 from torchvision import transforms
 from torchvision.datasets import MNIST
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 import lightning as L
 import time
 import torchvision
+import numpy as np
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
 
 from genetic_algorithms.ga import GeneticAlgorithmNN
-from genetic_algorithms.model import ANN, MLP, train_ann, test_ann
+from genetic_algorithms.model import ANN, MLP, train_ann, test_ann, embeddingMLP
 from snn.FashionMNIST.model import MultiStepSNN
 import pickle
 
@@ -25,19 +26,94 @@ from sessions import GATrainingSession, BaselineTrainingSession, PyGADTrainingSe
 
 from config import INCREMENTAL_TRAINER_CONFIG
 
-def run_experiment(experiment_id):
+class CIFAR10EmbeddingsDataset(Dataset):
+    def __init__(self, embeddings, labels):
+        self.embeddings = embeddings
+        self.labels = labels
+        self.targets = torch.tensor(labels, dtype=torch.long)
+
+    def __len__(self):
+        return len(self.embeddings)
+
+    def __getitem__(self, idx):
+        return self.embeddings[idx], self.labels[idx]
+
+def generate_cifar10_embeddings(batch_size=64):
+    # Load the CIFAR-10 dataset
     dataset_name = 'CIFAR10'
     data_path=f'/tmp/{dataset_name}'
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-    ])
     train_dt = datasets.CIFAR10(data_path, train=True, download=True, transform=torchvision.models.ResNet18_Weights.IMAGENET1K_V1.transforms())
     test_dt = datasets.CIFAR10(data_path, train=False, download=True, transform=torchvision.models.ResNet18_Weights.IMAGENET1K_V1.transforms())
 
+    # Create a dataloader
+    train_dataloader = DataLoader(train_dt, batch_size=batch_size, shuffle=False)
+    test_dataloader = DataLoader(test_dt, batch_size=batch_size, shuffle=False)
+
+    # Load the pretrained ResNet18 model
+    model = torchvision.models.resnet18(weights=torchvision.models.ResNet18_Weights.IMAGENET1K_V1)
+    model.eval()
+
+    # Remove the final classification layer (fc)
+    feature_extractor = torch.nn.Sequential(*list(model.children())[:-1])
+
+    # Use GPU if available
+    device = torch.device("cuda")
+    feature_extractor.to(device)
+
+    # Extract embeddings for the training set
+    train_embeddings = []
+    train_labels = []
+
+    with torch.no_grad():
+        for images, targets in train_dataloader:
+            images = images.to(device)
+
+            # Extract features
+            features = feature_extractor(images)
+            features = features.view(features.size(0), -1)  # Flatten the output
+
+            train_embeddings.append(features.cpu().numpy())
+            train_labels.append(targets.numpy())
+
+    # Concatenate all embeddings and labels
+    train_embeddings = np.concatenate(train_embeddings, axis=0)
+    train_labels = np.concatenate(train_labels, axis=0)
+
+    # Create a dataset with embeddings and labels
+    train_embed_set = CIFAR10EmbeddingsDataset(train_embeddings, train_labels)
+
+    # Extract embeddings for the test set
+    test_embeddings = []
+    test_labels = []
+
+    with torch.no_grad():
+        for images, targets in test_dataloader:
+            images = images.to(device)
+
+            # Extract features
+            features = feature_extractor(images)
+            features = features.view(features.size(0), -1)
+
+            test_embeddings.append(features.cpu().numpy())
+            test_labels.append(targets.numpy())
+
+    # Concatenate all embeddings and labels
+    test_embeddings = np.concatenate(test_embeddings, axis=0)
+    test_labels = np.concatenate(test_labels, axis=0)
+
+    # Create a dataset with embeddings and labels
+    test_embed_set = CIFAR10EmbeddingsDataset(test_embeddings, test_labels)
+
+    return train_embed_set, test_embed_set
+
+def run_experiment(experiment_id):
+
+    train_dt, test_dt = generate_cifar10_embeddings()
+
     hyperparameters_session = {
-        'model_type': MLP,
-        'transfer': True,
-        'baseline_model_type': MLP,
+        'model_type': embeddingMLP,
+        'transfer': False,
+        'baseline_model_type': embeddingMLP,
         'batch_size': 64,
         'num_epochs': 1,
         'lr': 0.001,
@@ -97,5 +173,5 @@ if __name__ == "__main__":
     timestamp = time.strftime("%Y%m%d-%H%M%S")
 
     for i in range(N_EXPERIMENTS):
-        experiment_id = f"experiment_pygad_mlp_{i}_{timestamp}"
+        experiment_id = f"experiment_pygad_embeddings_mlp_{i}_{timestamp}"
         run_experiment(experiment_id)
