@@ -60,7 +60,8 @@ class MLP(nn.Module):
 class embeddingMLP(nn.Module):
     def __init__(self, state_dict=None):
         super(embeddingMLP, self).__init__()
-        self.fc1 = nn.Linear(512, 10)
+        # self.fc1 = nn.Linear(512, 10)
+        self.fc1 = nn.Linear(2048, 10)
         
     def forward(self, x: torch.Tensor):
         x = self.fc1(x)
