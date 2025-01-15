@@ -37,20 +37,22 @@ class ANN(nn.Module):
 class MLP(nn.Module):
     def __init__(self, state_dict=None):
         super(MLP, self).__init__()
-        resnet50 = torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2)
+        # resnet = torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2)
+        resnet = torchvision.models.resnet18(weights=torchvision.models.ResNet18_Weights.IMAGENET1K_V1)
         # Get the all the layers except the last one, freeze the weights
-        self.resnet50 = nn.Sequential(*list(resnet50.children())[:-1])
-        for param in self.resnet50.parameters():
+        self.resnet = nn.Sequential(*list(resnet.children())[:-1])
+        for param in self.resnet.parameters():
             param.requires_grad = False
-        self.fc = nn.Linear(2048, 10)
+        self.fc = nn.Linear(512, 10)
+        # self.fc = nn.Linear(2048, 10)
         self.flatten = nn.Flatten()
 
-        self.origin = "new"
-        if state_dict is not None:
-            self.load_state_dict(state_dict)
+        #self.origin = "new"
+        #if state_dict is not None:
+        #    self.load_state_dict(state_dict)
 
     def forward(self, x: torch.Tensor):
-        x = self.resnet50(x)
+        x = self.resnet(x)
         x = self.flatten(x)
         x = self.fc(x)
         return x

@@ -11,6 +11,7 @@ from torchvision import transforms
 from torchvision.datasets import MNIST
 from torch.utils.data import DataLoader
 import lightning as L
+import time
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
 
@@ -21,11 +22,11 @@ import pickle
 
 from sessions import GATrainingSession, BaselineTrainingSession, PyGADTrainingSession
 
+from config import INCREMENTAL_TRAINER_CONFIG
 
-def main():
+def run_experiment(experiment_id):
     dataset_name = 'CIFAR10'
-    # data_path=f'/tmp/{dataset_name}'
-    data_path = '/scratch/zyi/codeSpace/datasets/CIFAR10'
+    data_path=f'/tmp/{dataset_name}'
     transform = transforms.Compose([
         transforms.ToTensor(),
     ])
@@ -41,7 +42,7 @@ def main():
         'lr': 0.001,
         'num_generations': 100,
         'num_parents_mating': 5,
-        'population_size': 50,
+        'population_size': 1000,
         'parent_selection_type': "sss",
         'keep_parents': -1,
         'K_tournament': 3,
@@ -51,37 +52,34 @@ def main():
         'mutation_by_replacement': False,
         'random_mutation_min_val': -0.1,
         'random_mutation_max_val': 0.1,
-        'fitness_batch_size': 50,
+        'fitness_batch_size': 1000,
         'slurm': True
     }
 
-    incremental_trainer_config = {
-        'replay_buffer_size': 1000,
-        'incremental_training_size': 1000,
-        'training_sessions': 6,
-        'base_classes': [0,1,2,3,4],
-        'incremental_classes_total': [5,6,7,8,9],
-        'incremental_classes_per_session': 1,
-        'enable_progress_bar': not hyperparameters_session['slurm'],
-    }
+    INCREMENTAL_TRAINER_CONFIG['enable_progress_bar'] = not hyperparameters_session['slurm']
 
     baseline_session = BaselineTrainingSession(hyperparameters_session) #exchange with your own session trainer
     ga_session = PyGADTrainingSession(hyperparameters_session) #exchange with your own session trainer
 
-    # train GA session
+    #train baseline session
+    trainer2 = IncrementalTrainer(baseline_session, train_dt, test_dt,
+                                    "/tmp/checkpoints", INCREMENTAL_TRAINER_CONFIG, 
+                                    experiment_id, alpha_ideal=None)
+    trainer2.train()
+    baseline_alpha_ideal = trainer2.get_alpha_ideal()
+    if baseline_alpha_ideal is None:
+        raise ValueError("Baseline alpha_ideal is None")
+    trainer2.save_metrics()
+    
+    #train pygad session
     trainer1 = IncrementalTrainer(ga_session, train_dt, test_dt, 
-                                 "/home/zyi/scratch/ETHz/checkpoints", incremental_trainer_config)
+                                 "/tmp/checkpoints", INCREMENTAL_TRAINER_CONFIG,
+                                 experiment_id, alpha_ideal=baseline_alpha_ideal)
     trainer1.train()
     trainer1.save_metrics()
 
-    # train baseline session
-    trainer2 = IncrementalTrainer(baseline_session, train_dt, test_dt,
-                                    "/home/zyi/scratch/ETHz/checkpoints", incremental_trainer_config)
-    trainer2.train()
-    trainer2.save_metrics()
-
     # summarize cf metrics
-    print("Baseline vs GA session metrics")
+    print("Baseline vs PyGAD_MLP session metrics")
     print(f"Omega All [baseline,ga]: {trainer2.get_cf_metric('omega_all')}, {trainer1.get_cf_metric('omega_all')}")
     print(f"Omega Base [baseline,ga]: {trainer2.get_cf_metric('omega_base')}, {trainer1.get_cf_metric('omega_base')}")
     print(f"Omega New [baseline,ga]: {trainer2.get_cf_metric('omega_new')}, {trainer1.get_cf_metric('omega_new')}")
@@ -93,4 +91,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    
+    N_EXPERIMENTS = 10 #number of experiments to run for statistical significance
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+
+    for i in range(N_EXPERIMENTS):
+        experiment_id = f"experiment_pygad_mlp_{i}_{timestamp}"
+        run_experiment(experiment_id)
