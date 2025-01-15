@@ -36,7 +36,7 @@ def run_experiment(experiment_id):
         'lr': 0.001,
         'num_generations': 200,
         'num_parents_mating': 5,
-        'population_size': 1000,
+        'population_size': 500,
         'parent_selection_type': "sss",
         'keep_parents': -1,
         'K_tournament': 3,
@@ -46,7 +46,7 @@ def run_experiment(experiment_id):
         'mutation_by_replacement': False,
         'random_mutation_min_val': -0.1,
         'random_mutation_max_val': 0.1,
-        'fitness_batch_size': 1000,
+        'fitness_batch_size': 500,
         'slurm': True
     }
     
