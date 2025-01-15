@@ -75,10 +75,10 @@ def run_experiment(experiment_id):
 
     
     # summarize cf metrics
-    print("Baseline vs SNN session metrics")
-    print(f"Omega All [baseline,snn]: {trainer2.get_cf_metric('omega_all')}, {trainer1.get_cf_metric('omega_all')}")
-    print(f"Omega Base [baseline,snn]: {trainer2.get_cf_metric('omega_base')}, {trainer1.get_cf_metric('omega_base')}")
-    print(f"Omega New [baseline,snn]: {trainer2.get_cf_metric('omega_new')}, {trainer1.get_cf_metric('omega_new')}")
+    print("Baseline vs PyGAD session metrics")
+    print(f"Omega All [baseline,pygad]: {trainer2.get_cf_metric('omega_all')}, {trainer1.get_cf_metric('omega_all')}")
+    print(f"Omega Base [baseline,pygad]: {trainer2.get_cf_metric('omega_base')}, {trainer1.get_cf_metric('omega_base')}")
+    print(f"Omega New [baseline,pygad]: {trainer2.get_cf_metric('omega_new')}, {trainer1.get_cf_metric('omega_new')}")
     
     #baseline session metrics
     #INFO:root:Omega Base: 0.8416872224963
