@@ -217,7 +217,7 @@ class BaselineTrainingSession(TrainingSessionInterface):
         self.persistent_workers = True
     
     def init_model(self, full_file_path: str):
-        self.model = LightningANN.load_from_checkpoint(full_file_path)
+        self.model = LightningANN.load_from_checkpoint(full_file_path, model_type=self.hyperparams['baseline_model_type'])
         self.trainer = L.Trainer(**self.trainer_params) #reset the trainer
         
     def fit(self, train_dt, base_replay_dt=None):

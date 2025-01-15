@@ -37,7 +37,7 @@ class ANN(nn.Module):
 
 
 class LightningANN(L.LightningModule):
-    def __init__(self, learning_rate=0.001, model_type:callable=ANN):
+    def __init__(self, learning_rate=0.001, model_type:callable=None):
         super(LightningANN, self).__init__()
         self.model = model_type()
         self.criterion = torch.nn.CrossEntropyLoss()
