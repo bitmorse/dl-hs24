@@ -49,7 +49,9 @@ def run_experiment(experiment_id):
                                     "/tmp/checkpoints", INCREMENTAL_TRAINER_CONFIG, 
                                     experiment_id, alpha_ideal=None)
     trainer2.train()
-    baseline_alpha_ideal = trainer2.get_cf_metric('alpha_ideal')
+    baseline_alpha_ideal = trainer2.get_alpha_ideal()
+    if baseline_alpha_ideal is None:
+        raise ValueError("Baseline alpha_ideal is None")
     trainer2.save_metrics()
     
     
