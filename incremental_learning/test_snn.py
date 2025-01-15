@@ -26,6 +26,7 @@ from sessions import SNNTrainingSession, BaselineTrainingSession
 def run_experiment(experiment_id):
 
     snn_hyperparameters_session = {
+        'baseline_model_type': ANN,
         'batch_size': 64,
         'num_epochs': 1,
         'lr': 0.001

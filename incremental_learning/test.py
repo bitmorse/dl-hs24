@@ -23,6 +23,7 @@ from config import get_datasets, INCREMENTAL_TRAINER_CONFIG
 
 def run_experiment(experiment_id):
     hyperparameters_session = {
+        'baseline_model_type': ANN,
         'batch_size': 64,
         'num_epochs': 1,
         'lr': 0.001,

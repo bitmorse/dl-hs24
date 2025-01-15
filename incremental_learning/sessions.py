@@ -7,6 +7,7 @@ import sys
 import torch
 from torch import nn
 import torch.nn.functional as F
+import torchvision
 from torchvision import transforms
 from torchvision.datasets import MNIST
 from torch.utils.data import DataLoader
@@ -170,10 +171,11 @@ class PyGADTrainingSession(TrainingSessionInterface):
 
             ga = PyGADNN(
                 model=self.model_type,
+                transfer=self.hyperparams['transfer'],
                 train_loader=merged_loader,
                 num_generations=self.hyperparams['num_generations'],
                 num_parents_mating=self.hyperparams['num_parents_mating'],
-                initial_population=init_population(self.hyperparams['population_size'], [netA, netB]),
+                initial_population=init_population(self.hyperparams['population_size'], [netA, netB], self.hyperparams['transfer']),
                 sol_per_pop=self.hyperparams['population_size'],
                 parent_selection_type=self.hyperparams['parent_selection_type'],
                 keep_parents=self.hyperparams['keep_parents'],
@@ -204,7 +206,7 @@ class PyGADTrainingSession(TrainingSessionInterface):
 class BaselineTrainingSession(TrainingSessionInterface):
     def __init__(self, hyperparams: dict):
         self.hyperparams = hyperparams
-        self.model = LightningANN(learning_rate=hyperparams['lr'])
+        self.model = LightningANN(learning_rate=hyperparams['lr'], model_type=hyperparams['baseline_model_type'])
         self.trainer_params = {
             'max_epochs':hyperparams['num_epochs'], 
             'enable_checkpointing':False

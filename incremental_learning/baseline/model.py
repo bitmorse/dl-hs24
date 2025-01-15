@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchmetrics.classification import Accuracy
+import torchvision
 
 class ANN(nn.Module):
     def __init__(self):
@@ -36,9 +37,9 @@ class ANN(nn.Module):
 
 
 class LightningANN(L.LightningModule):
-    def __init__(self, learning_rate=0.001):
+    def __init__(self, learning_rate=0.001, model_type:callable=ANN):
         super(LightningANN, self).__init__()
-        self.model = ANN()
+        self.model = model_type()
         self.criterion = torch.nn.CrossEntropyLoss()
         self.learning_rate = learning_rate
         self.correct = 0
@@ -50,7 +51,8 @@ class LightningANN(L.LightningModule):
 
         # Forward pass
         out = self.model(images)
-        loss = self.criterion(F.log_softmax(out, dim=-1), labels)
+        #loss = self.criterion(F.log_softmax(out, dim=-1), labels)
+        loss = self.criterion(out, labels)
 
         return loss
     
