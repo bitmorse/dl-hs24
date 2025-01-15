@@ -34,9 +34,9 @@ def run_experiment(experiment_id):
         'batch_size': 64,
         'num_epochs': 1,
         'lr': 0.001,
-        'num_generations': 60,
+        'num_generations': 200,
         'num_parents_mating': 5,
-        'population_size': 1000,
+        'population_size': 500,
         'parent_selection_type': "sss",
         'keep_parents': -1,
         'K_tournament': 3,
@@ -46,7 +46,7 @@ def run_experiment(experiment_id):
         'mutation_by_replacement': False,
         'random_mutation_min_val': -0.1,
         'random_mutation_max_val': 0.1,
-        'fitness_batch_size': 1000,
+        'fitness_batch_size': 500,
         'slurm': True
     }
     
@@ -87,7 +87,7 @@ def run_experiment(experiment_id):
 
 if __name__ == "__main__":
     
-    N_EXPERIMENTS = 10 #number of experiments to run for statistical significance
+    N_EXPERIMENTS = 2 #number of experiments to run for statistical significance
     timestamp = time.strftime("%Y%m%d-%H%M%S")
 
     for i in range(N_EXPERIMENTS):
