@@ -59,7 +59,10 @@ class IncrementalTrainer:
         logging.info("Dataset info:")
         logging.info(f"Full Train: {len(full_train_dt)} samples")
         logging.info(f"Full Test: {len(full_test_dt)} samples")
-        
+    
+    def get_alpha_ideal(self):
+        return self.alpha_ideal
+    
     def get_cf_metric(self, metric_name):
         return self.cf_metrics.get(metric_name, None)
     
