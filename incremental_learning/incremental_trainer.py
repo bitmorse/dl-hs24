@@ -222,15 +222,26 @@ class IncrementalTrainer:
         if not os.path.exists(exp_folder):
             os.makedirs(exp_folder)
             
-        #save session hyperparameters
-        json.dump(self.session_trainer.hyperparams, open(f"{exp_folder}/session_hyperparams.json", 'w'))
+        def json_serializer(obj):
+            if isinstance(obj, type):
+                return str(obj)
+            raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
         
-        #save trainer hyperparameters
-        json.dump(self.config, open(f"{exp_folder}/config.json", 'w'))
-            
-        json.dump(self.test_metrics, open(f"{exp_folder}/metrics.json", 'w'))
-                
-        json.dump(self.cf_metrics, open(f"{exp_folder}/cf_metrics.json", 'w'))
+        # save session hyperparameters
+        with open(f"{exp_folder}/session_hyperparams.json", 'w') as f:
+            json.dump(self.session_trainer.hyperparams, f, default=json_serializer)
+        
+        # save trainer hyperparameters
+        with open(f"{exp_folder}/config.json", 'w') as f:
+            json.dump(self.config, f, default=json_serializer)
+        
+        # save metrics
+        with open(f"{exp_folder}/metrics.json", 'w') as f:
+            json.dump(self.test_metrics, f, default=json_serializer)
+        
+        # save catastrophic forgetting metrics
+        with open(f"{exp_folder}/cf_metrics.json", 'w') as f:
+            json.dump(self.cf_metrics, f, default=json_serializer)
         
         plt.figure()
         #plot alpha_base_sessions, alpha_new_sessions, alpha_all_sessions and save fig
