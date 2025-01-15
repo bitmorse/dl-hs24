@@ -11,6 +11,7 @@ from torchvision import transforms
 from torchvision.datasets import MNIST
 from torch.utils.data import DataLoader
 import lightning as L
+import time
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
 
@@ -21,17 +22,10 @@ import pickle
 
 from sessions import GATrainingSession, BaselineTrainingSession, PyGADTrainingSession
 
+from config import get_datasets, INCREMENTAL_TRAINER_CONFIG
 
-def main():
-    dataset_name = 'FashionMNIST'
-    data_path=f'/tmp/{dataset_name}'
-    transform = transforms.Compose([
-        transforms.Resize((28, 28)),
-        transforms.Grayscale(),
-        transforms.ToTensor(),
-    ])
-    train_dt = datasets.FashionMNIST(data_path, train=True, download=True, transform=transform)
-    test_dt = datasets.FashionMNIST(data_path, train=False, download=True, transform=transform)
+def run_experiment(experiment_id):
+    train_dt, test_dt = get_datasets(data_path='/tmp')
 
     hyperparameters_session = {
         'model_type': ANN,
@@ -55,43 +49,47 @@ def main():
         'fitness_batch_size': 1000,
         'slurm': True
     }
-
-    incremental_trainer_config = {
-        'replay_buffer_size': 1000,
-        'incremental_training_size': 1000,
-        'training_sessions': 6,
-        'base_classes': [0,1,2,3,4],
-        'incremental_classes_total': [5,6,7,8,9],
-        'incremental_classes_per_session': 1,
-        'enable_progress_bar': not hyperparameters_session['slurm'],
-    }
+    
+    INCREMENTAL_TRAINER_CONFIG['enable_progress_bar'] = not hyperparameters_session['slurm']
+    
 
     baseline_session = BaselineTrainingSession(hyperparameters_session) #exchange with your own session trainer
     ga_session = PyGADTrainingSession(hyperparameters_session) #exchange with your own session trainer
 
-    # train GA session
+    #train baseline session
+    trainer2 = IncrementalTrainer(baseline_session, train_dt, test_dt,
+                                    "/tmp/checkpoints", INCREMENTAL_TRAINER_CONFIG, 
+                                    experiment_id, alpha_ideal=None)
+    trainer2.train()
+    baseline_alpha_ideal = trainer2.get_alpha_ideal()
+    if baseline_alpha_ideal is None:
+        raise ValueError("Baseline alpha_ideal is None")
+    trainer2.save_metrics()
+    
+    #train pygad session
     trainer1 = IncrementalTrainer(ga_session, train_dt, test_dt, 
-                                 "/home/zyi/scratch/ETHz/checkpoints", incremental_trainer_config)
+                                 "/tmp/checkpoints", INCREMENTAL_TRAINER_CONFIG,
+                                 experiment_id, alpha_ideal=baseline_alpha_ideal)
     trainer1.train()
     trainer1.save_metrics()
 
-    # train baseline session
-    trainer2 = IncrementalTrainer(baseline_session, train_dt, test_dt,
-                                    "/home/zyi/scratch/ETHz/checkpoints", incremental_trainer_config)
-    trainer2.train()
-    trainer2.save_metrics()
-
+    
     # summarize cf metrics
-    print("Baseline vs GA session metrics")
-    print(f"Omega All [baseline,ga]: {trainer2.get_cf_metric('omega_all')}, {trainer1.get_cf_metric('omega_all')}")
-    print(f"Omega Base [baseline,ga]: {trainer2.get_cf_metric('omega_base')}, {trainer1.get_cf_metric('omega_base')}")
-    print(f"Omega New [baseline,ga]: {trainer2.get_cf_metric('omega_new')}, {trainer1.get_cf_metric('omega_new')}")
-
-    # baseline session metrics
-    # INFO:root:Omega Base: 0.8416872224963
-    # INFO:root:Omega New: 0.9972
-    # INFO:root:Omega All: 0.7397220851833579
-
+    print("Baseline vs SNN session metrics")
+    print(f"Omega All [baseline,snn]: {trainer2.get_cf_metric('omega_all')}, {trainer1.get_cf_metric('omega_all')}")
+    print(f"Omega Base [baseline,snn]: {trainer2.get_cf_metric('omega_base')}, {trainer1.get_cf_metric('omega_base')}")
+    print(f"Omega New [baseline,snn]: {trainer2.get_cf_metric('omega_new')}, {trainer1.get_cf_metric('omega_new')}")
+    
+    #baseline session metrics
+    #INFO:root:Omega Base: 0.8416872224963
+    #INFO:root:Omega New: 0.9972
+    #INFO:root:Omega All: 0.7397220851833579
 
 if __name__ == "__main__":
-    main()
+    
+    N_EXPERIMENTS = 10 #number of experiments to run for statistical significance
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+
+    for i in range(N_EXPERIMENTS):
+        experiment_id = f"experiment_pygad_{i}_{timestamp}"
+        run_experiment(experiment_id)
