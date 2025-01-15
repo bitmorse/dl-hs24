@@ -42,15 +42,17 @@ def generate_cifar10_embeddings(batch_size=64):
     # Load the CIFAR-10 dataset
     dataset_name = 'CIFAR10'
     data_path=f'/tmp/{dataset_name}'
-    train_dt = datasets.CIFAR10(data_path, train=True, download=True, transform=torchvision.models.ResNet18_Weights.IMAGENET1K_V1.transforms())
-    test_dt = datasets.CIFAR10(data_path, train=False, download=True, transform=torchvision.models.ResNet18_Weights.IMAGENET1K_V1.transforms())
+    # train_dt = datasets.CIFAR10(data_path, train=True, download=True, transform=torchvision.models.ResNet18_Weights.IMAGENET1K_V1.transforms())
+    # test_dt = datasets.CIFAR10(data_path, train=False, download=True, transform=torchvision.models.ResNet18_Weights.IMAGENET1K_V1.transforms())
+    train_dt = datasets.CIFAR10(data_path, train=True, download=True, transform=torchvision.models.ResNet50_Weights.IMAGENET1K_V2.transforms())
+    test_dt = datasets.CIFAR10(data_path, train=False, download=True, transform=torchvision.models.ResNet50_Weights.IMAGENET1K_V2.transforms())
 
     # Create a dataloader
     train_dataloader = DataLoader(train_dt, batch_size=batch_size, shuffle=False)
     test_dataloader = DataLoader(test_dt, batch_size=batch_size, shuffle=False)
 
     # Load the pretrained ResNet18 model
-    model = torchvision.models.resnet18(weights=torchvision.models.ResNet18_Weights.IMAGENET1K_V1)
+    model = torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2)
     model.eval()
 
     # Remove the final classification layer (fc)
@@ -117,9 +119,9 @@ def run_experiment(experiment_id):
         'batch_size': 64,
         'num_epochs': 1,
         'lr': 0.001,
-        'num_generations': 70,
+        'num_generations': 100,
         'num_parents_mating': 5,
-        'population_size': 100,
+        'population_size': 200,
         'parent_selection_type': "sss",
         'keep_parents': -1,
         'K_tournament': 3,
@@ -129,7 +131,7 @@ def run_experiment(experiment_id):
         'mutation_by_replacement': False,
         'random_mutation_min_val': -0.1,
         'random_mutation_max_val': 0.1,
-        'fitness_batch_size': 100,
+        'fitness_batch_size': 200,
         'slurm': True
     }
 
@@ -169,7 +171,7 @@ def run_experiment(experiment_id):
 
 if __name__ == "__main__":
     
-    N_EXPERIMENTS = 5 #number of experiments to run for statistical significance
+    N_EXPERIMENTS = 1 #number of experiments to run for statistical significance
     timestamp = time.strftime("%Y%m%d-%H%M%S")
 
     for i in range(N_EXPERIMENTS):
