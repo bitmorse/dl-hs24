@@ -3,6 +3,8 @@ import torch
 import numpy as np
 from genetic_algorithms.model import test_ann
 
+from collections import OrderedDict
+
 # Convert weights and biases to a 1D array.
 def model_weights_as_vector(model):
     weights_vector = []
@@ -31,6 +33,31 @@ def model_weights_as_dict(model, weights_vector):
         start = start + layer_weights_size
 
     return weights_dict
+
+def last_weights_as_vector(model):
+    vector = []
+
+    weights_key = list(model.state_dict().keys())[-2]
+    vector.extend(model.state_dict()[weights_key].cpu().detach().numpy().reshape(-1))
+    
+    bias_key = list(model.state_dict().keys())[-1]
+    vector.extend(model.state_dict()[bias_key].cpu().detach().numpy().reshape(-1))
+
+    return np.array(vector)
+
+def last_weights_as_dict(model, weights_vector):
+    weights_key = list(model.state_dict().keys())[-2]
+    w_matrix = model.state_dict()[weights_key].cpu().detach().numpy()
+    layer_weights_shape = w_matrix.shape
+    layer_weights_matrix = np.reshape(weights_vector[:w_matrix.size], newshape=(layer_weights_shape))
+    
+    bias_key = list(model.state_dict().keys())[-1]
+    b_matrix = model.state_dict()[bias_key].cpu().detach().numpy()
+    layer_bias_shape = b_matrix.shape
+    layer_bias_matrix = np.reshape(weights_vector[w_matrix.size:], newshape=(layer_bias_shape))
+
+    return OrderedDict([(weights_key, torch.from_numpy(layer_weights_matrix).to("cuda")), (bias_key, torch.from_numpy(layer_bias_matrix).to("cuda"))])
+    # return {weights_key: torch.from_numpy(layer_weights_matrix).to("cuda"), bias_key: torch.from_numpy(layer_bias_matrix).to("cuda")}
 
 def fitness_func(ga_instanse, solution, sol_idx):
     pass
@@ -64,24 +91,31 @@ def on_generation(ga_instance):
 
     del model
 
-def init_population(population_size, models: list):
+def init_population(population_size, models: list, transfer=False):
     initial_population = []
     for i in range(population_size):
         model_idx = i % len(models)
         model = models[model_idx]
-        model_weights = model_weights_as_vector(model)
+        if not transfer:
+            model_weights = model_weights_as_vector(model)
+        else:
+            model_weights = last_weights_as_vector(model)
         initial_population.append(model_weights)
-                                  
+
     return initial_population
 
 class PyGADNN(GA):
-    def __init__(self, model:callable=None, train_loader=None, **kwargs):
+    def __init__(self, model:callable=None, transfer=False, train_loader=None, **kwargs):
         self.model = model
+        self.transfer = transfer
         self.train_loader = train_loader
         super().__init__(**kwargs)
 
         assert self.sol_per_pop % self.fitness_batch_size == 0, "sol_per_pop should be divisible by fitness_batch_size"
         self.nn_population = torch.nn.ModuleList([ model() for _ in range(self.fitness_batch_size) ])
+        for model in self.nn_population:
+            for param in model.parameters():
+                param.requires_grad = False
         if self.sol_per_pop == self.fitness_batch_size:
             self.nn_population.to("cuda")
 
@@ -108,8 +142,17 @@ class PyGADNN(GA):
             if self.sol_per_pop != self.fitness_batch_size:
                 self.nn_population.to("cuda")
             for model, solution in zip(self.nn_population, solutions):
-                model_weights = model_weights_as_dict(model, solution)
-                model.load_state_dict(model_weights)
+                if not self.transfer:
+                    model_weights = model_weights_as_dict(model, solution)
+                    model.load_state_dict(model_weights)
+                else:
+                    model_weights = last_weights_as_dict(model, solution)
+                    keys = list(model_weights.keys())
+                    model.fc.weight.requires_grad = False
+                    model.fc.bias.requires_grad = False
+                    model.fc.weight.copy_(model_weights[keys[0]])
+                    model.fc.bias.copy_(model_weights[keys[1]])
+
                 model.eval()
             
             loss = torch.nn.CrossEntropyLoss()
@@ -136,6 +179,15 @@ class PyGADNN(GA):
     def best_solution_NN(self):
         solution, solution_fitness, solution_idx = self.best_solution()
         model = self.model().to("cuda")
-        model_weights = model_weights_as_dict(model, solution)
-        model.load_state_dict(model_weights)
+        if not self.transfer:
+            model_weights = model_weights_as_dict(model, solution)
+            model.load_state_dict(model_weights)
+        else:
+            model_weights = last_weights_as_dict(model, solution)
+            keys = list(model_weights.keys())
+            model.fc.weight.requires_grad = False
+            model.fc.bias.requires_grad = False
+            model.fc.weight.copy_(model_weights[keys[0]])
+            model.fc.bias.copy_(model_weights[keys[1]])
+        
         return model

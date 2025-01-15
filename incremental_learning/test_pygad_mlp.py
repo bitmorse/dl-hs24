@@ -15,7 +15,7 @@ import lightning as L
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
 
 from genetic_algorithms.ga import GeneticAlgorithmNN
-from genetic_algorithms.model import ANN, train_ann, test_ann
+from genetic_algorithms.model import ANN, MLP, train_ann, test_ann
 from snn.FashionMNIST.model import MultiStepSNN
 import pickle
 
@@ -23,26 +23,25 @@ from sessions import GATrainingSession, BaselineTrainingSession, PyGADTrainingSe
 
 
 def main():
-    dataset_name = 'FashionMNIST'
-    data_path=f'/tmp/{dataset_name}'
+    dataset_name = 'CIFAR10'
+    # data_path=f'/tmp/{dataset_name}'
+    data_path = '/scratch/zyi/codeSpace/datasets/CIFAR10'
     transform = transforms.Compose([
-        transforms.Resize((28, 28)),
-        transforms.Grayscale(),
         transforms.ToTensor(),
     ])
-    train_dt = datasets.FashionMNIST(data_path, train=True, download=True, transform=transform)
-    test_dt = datasets.FashionMNIST(data_path, train=False, download=True, transform=transform)
+    train_dt = datasets.CIFAR10(data_path, train=True, download=True, transform=transform)
+    test_dt = datasets.CIFAR10(data_path, train=False, download=True, transform=transform)
 
     hyperparameters_session = {
-        'model_type': ANN,
-        'transfer': False,
-        'baseline_model_type': ANN,
+        'model_type': MLP,
+        'transfer': True,
+        'baseline_model_type': MLP,
         'batch_size': 64,
         'num_epochs': 1,
         'lr': 0.001,
         'num_generations': 100,
         'num_parents_mating': 5,
-        'population_size': 1000,
+        'population_size': 50,
         'parent_selection_type': "sss",
         'keep_parents': -1,
         'K_tournament': 3,
@@ -52,7 +51,7 @@ def main():
         'mutation_by_replacement': False,
         'random_mutation_min_val': -0.1,
         'random_mutation_max_val': 0.1,
-        'fitness_batch_size': 1000,
+        'fitness_batch_size': 50,
         'slurm': True
     }
 
