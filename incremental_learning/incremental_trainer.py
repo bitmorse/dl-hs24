@@ -12,19 +12,25 @@ from interfaces import TrainingSessionInterface
 import logging
 import sys
 import json
-
+import time
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 class IncrementalTrainer:
     def __init__(self, session_trainer: TrainingSessionInterface, 
                 full_train_dt: Dataset, full_test_dt: Dataset, 
-                checkpoints_path: str, config: dict) -> None:
+                checkpoints_path: str, config: dict, experiment_dir=None,
+                alpha_ideal=None) -> None:
         self.session_trainer = session_trainer
         self.checkpoints_path = checkpoints_path
         self.experiment_name = f"{session_trainer.__class__.__name__}_{full_train_dt.__class__.__name__}"
         self.full_train_dt = full_train_dt
         self.full_test_dt = full_test_dt
+        self.experiment_dir = experiment_dir
         
+        if experiment_dir == None:
+            self.experiment_dir = int(time.time())
+            
+            
         self.config = config
 
         # there a T training sessions. For each session i, we collect the following metrics.
@@ -42,19 +48,33 @@ class IncrementalTrainer:
             'omega_all': 0, # measure retention of prior info AND aquisition of new info
         }
         
+        if alpha_ideal == None:
+            self.alpha_ideal = 0
+            self._compute_alpha_ideal()
+        else:
+            logging.info("Using provided alpha_ideal.")
+            self.alpha_ideal = alpha_ideal
+
         logging.info(f"Experiment name: {self.experiment_name}")
         logging.info("Dataset info:")
         logging.info(f"Full Train: {len(full_train_dt)} samples")
         logging.info(f"Full Test: {len(full_test_dt)} samples")
         
-
     def get_cf_metric(self, metric_name):
         return self.cf_metrics.get(metric_name, None)
+    
+    def _compute_alpha_ideal(self):
+        logging.info("Computing alpha_ideal (base set accuracy on 'offline model')...")
+        ideal_trainer = self.session_trainer.__class__(self.session_trainer.hyperparams)
+        ideal_trainer.fit(self.full_train_dt)
+        base_test_dt = self._split(self.full_test_dt, self.config['base_classes'])
+        self.test_metrics['alpha_ideal'] = ideal_trainer.test(base_test_dt)
+        logging.info(f"alpha_ideal: {self.test_metrics['alpha_ideal']}")
     
     def _compute_cf_metrics(self):
         T = self.config['training_sessions']
         
-        omega_base = np.sum(self.test_metrics['alpha_base_sessions'])
+        omega_base = np.sum(self.test_metrics['alpha_base_sessions'][1:])#skip the first session like in the paper
         omega_base /= ((T-1) * self.test_metrics['alpha_ideal'])
         
         omega_new = np.sum(self.test_metrics['alpha_new_sessions'])
@@ -90,9 +110,10 @@ class IncrementalTrainer:
         base_train_dt = self._split(self.full_train_dt, base_classes)
         base_test_dt = self._split(self.full_test_dt, base_classes)
         
-        incremental_classes_used = []
+        incremental_classes_cumulative = []
         incremental_train_dt = None
-        incremental_test_dt = None
+        incremental_current_session_test_dt = None
+        incremental_all_sessions_test_dt = None
         
         for session_number in range(T):
             logging.info(f"Training session {session_number} of {T} started.")
@@ -100,24 +121,33 @@ class IncrementalTrainer:
             new_checkpoint = os.path.join(self.checkpoints_path, f"{self.experiment_name}_session_{session_number}.ckpt")
             
             if session_number > 0:
-                #draw incremental classes
-                incremental_classes_total = list(set(incremental_classes_total) - set(incremental_classes_used))
+                #draw incremental classes for this session only. these classes have not been used in previous sessions!
+                #incremental classes may contain just 1 class (defined by incremental_classes_per_session)
+                incremental_classes_total = list(set(incremental_classes_total) - set(incremental_classes_cumulative))
+                #decrease the available incremental classes with each session
                 incremental_classes = np.random.choice( 
                     incremental_classes_total, 
                     incremental_classes_per_session, 
                     replace=False
                 ).tolist()
                 
-                incremental_classes_used.extend(incremental_classes)
+                #add the new incremental classes to the list of incremental classes used
+                incremental_classes_cumulative.extend(incremental_classes)
                 
+                #train set for this session
                 incremental_train_dt = self._split(self.full_train_dt, incremental_classes)
-                incremental_test_dt = self._split(self.full_test_dt, incremental_classes)
+                
+                #this test set is used for alpha_new(i), which is the test accuracy for session i immediately after it is learned
+                incremental_current_session_test_dt = self._split(self.full_test_dt, incremental_classes)
+                
+                #this test set is used for alpha_all(i), which is the test accuracy of all of the test data for all classes seen to this point
+                incremental_all_sessions_test_dt = self._split(self.full_test_dt, incremental_classes_cumulative)
                 
                 #decimate incremental train_dt to config['incremental_training_size']
                 incremental_train_dt = torch.utils.data.Subset(incremental_train_dt, np.random.choice(len(incremental_train_dt), self.config['incremental_training_size'], replace=False))
                 
-                logging.info(f"Session {session_number} incremental classes {incremental_classes} (num train samples: {len(incremental_train_dt)})")
-                logging.info(f"# of incremental test samples: {len(incremental_test_dt)}")                
+                logging.info(f"current session classes: {incremental_classes} (num train samples: {len(incremental_train_dt)} / num test samples: {len(incremental_current_session_test_dt)})")
+                logging.info(f"all session classes seen so far: {incremental_classes_cumulative} (no train samples for cumulative / num test samples: {len(incremental_all_sessions_test_dt)})")
                 
             # fit model
             self.train_session(
@@ -127,7 +157,7 @@ class IncrementalTrainer:
                         
             # test model and save metrics
             self.test_session(
-                base_test_dt, incremental_test_dt
+                base_test_dt, incremental_current_session_test_dt, incremental_all_sessions_test_dt
             )
             
             if session_number == 0:
@@ -161,25 +191,20 @@ class IncrementalTrainer:
         self.session_trainer.save_model(new_checkpoint_path)
         
         
-    def test_session(self, base_dt: Dataset, incremental_dt: Dataset):
-
-        # test model
-        alpha_base = self.session_trainer.test(base_dt)
-        logging.info(f"[base] Test: {alpha_base}")
-        
+    def test_session(self, base_dt: Dataset, incremental_dt: Dataset, incremental_all_dt: Dataset):
         alpha_new = 0
         alpha_all = 0
+        alpha_base = self.session_trainer.test(base_dt)
         
-        if (incremental_dt is not None):
+        if (incremental_dt is not None and incremental_all_dt is not None):
+            logging.info(f"[base] Test: {alpha_base}")
+            
             alpha_new = self.session_trainer.test(incremental_dt)
             logging.info(f"[incremental] Test: {alpha_new}")
             
-            base_and_incremental_dt = torch.utils.data.ConcatDataset([base_dt, incremental_dt])
-            alpha_all = self.session_trainer.test(base_and_incremental_dt)
+            base_and_incremental_cumulative_dt = torch.utils.data.ConcatDataset([base_dt, incremental_all_dt])
+            alpha_all = self.session_trainer.test(base_and_incremental_cumulative_dt)
             logging.info(f"[base+incremental] Test: {alpha_all}")
-           
-        if len(self.test_metrics['alpha_base_sessions']) == 0:
-            self.test_metrics['alpha_ideal'] = alpha_base
         
         self.test_metrics['alpha_new_sessions'].append(alpha_new)
         self.test_metrics['alpha_all_sessions'].append(alpha_all)
@@ -189,12 +214,20 @@ class IncrementalTrainer:
     
     def save_metrics(self):
         #create folder for results
-        if not os.path.exists(f"incremental_trainer_experiments/{self.experiment_name}"):
-            os.makedirs(f"incremental_trainer_experiments/{self.experiment_name}")
+        exp_folder = f"incremental_trainer_experiments/{self.experiment_dir}/{self.experiment_name}"
+        
+        if not os.path.exists(exp_folder):
+            os.makedirs(exp_folder)
             
-        json.dump(self.test_metrics, open(f"incremental_trainer_experiments/{self.experiment_name}/metrics.json", 'w'))
+        #save session hyperparameters
+        json.dump(self.session_trainer.hyperparams, open(f"{exp_folder}/session_hyperparams.json", 'w'))
+        
+        #save trainer hyperparameters
+        json.dump(self.config, open(f"{exp_folder}/config.json", 'w'))
+            
+        json.dump(self.test_metrics, open(f"{exp_folder}/metrics.json", 'w'))
                 
-        json.dump(self.cf_metrics, open(f"incremental_trainer_experiments/{self.experiment_name}/cf_metrics.json", 'w'))
+        json.dump(self.cf_metrics, open(f"{exp_folder}/cf_metrics.json", 'w'))
         
         plt.figure()
         #plot alpha_base_sessions, alpha_new_sessions, alpha_all_sessions and save fig
@@ -204,4 +237,5 @@ class IncrementalTrainer:
         plt.legend()
         plt.xlabel('Training Sessions')
         
-        plt.savefig(f"incremental_trainer_experiments/{self.experiment_name}/metrics.png")
+        plt.savefig(f"{exp_folder}/metrics.png")
+        plt.close()

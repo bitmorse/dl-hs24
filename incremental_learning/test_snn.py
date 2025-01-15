@@ -11,6 +11,8 @@ from torchvision import transforms
 from torchvision.datasets import MNIST
 from torch.utils.data import DataLoader
 import lightning as L
+import time
+from config import get_datasets, INCREMENTAL_TRAINER_CONFIG
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
 
@@ -18,59 +20,37 @@ from genetic_algorithms.ga import GeneticAlgorithmNN
 from genetic_algorithms.model import ANN, train_ann, test_ann
 import pickle
 
-from sessions import SNNTrainingSession, GATrainingSession, BaselineTrainingSession
+from sessions import SNNTrainingSession, BaselineTrainingSession
 
 
-def main():
-    dataset_name = 'FashionMNIST'
-    data_path=f'./archive/{dataset_name}'
-    transform = transforms.Compose([
-        transforms.Resize((28, 28)),
-        transforms.Grayscale(),
-        transforms.ToTensor(),
-    ])
-    train_dt = datasets.FashionMNIST(data_path, train=True, download=True, transform=transform)
-    test_dt = datasets.FashionMNIST(data_path, train=False, download=True, transform=transform)
-    
+def run_experiment(experiment_id):
+
     snn_hyperparameters_session = {
         'batch_size': 64,
         'num_epochs': 1,
         'lr': 0.001
     }
     
-    incremental_trainer_config = {
-        'replay_buffer_size': 1000,
-        'incremental_training_size': 1000,
-        'training_sessions': 6,
-        'base_classes': [0,1,2,3,4],
-        'incremental_classes_total': [5,6,7,8,9],
-        'incremental_classes_per_session': 1
-    }
-
-    incremental_trainer_wo_replay_config = {
-        'replay_buffer_size': 0,
-        'incremental_training_size': 1000,
-        'training_sessions': 6,
-        'base_classes': [0,1,2,3,4],
-        'incremental_classes_total': [5,6,7,8,9],
-        'incremental_classes_per_session': 1
-    }
+    train_dt, test_dt = get_datasets(data_path='/tmp')
     
     baseline_session = BaselineTrainingSession(snn_hyperparameters_session) #exchange with your own session trainer
     snn_session = SNNTrainingSession(snn_hyperparameters_session) #exchange with your own session trainer
-    
-    
-    #train SNN session
-    trainer1 = IncrementalTrainer(snn_session, train_dt, test_dt, 
-                                 "/tmp/checkpoints", incremental_trainer_config)
-    trainer1.train()
-    trainer1.save_metrics()
 
     #train baseline session
     trainer2 = IncrementalTrainer(baseline_session, train_dt, test_dt,
-                                    "/tmp/checkpoints", incremental_trainer_config)
+                                    "/tmp/checkpoints", INCREMENTAL_TRAINER_CONFIG, 
+                                    experiment_id, alpha_ideal=None)
     trainer2.train()
+    baseline_alpha_ideal = trainer2.get_cf_metric('alpha_ideal')
     trainer2.save_metrics()
+    
+    #train SNN session
+    trainer1 = IncrementalTrainer(snn_session, train_dt, test_dt, 
+                                 "/tmp/checkpoints", INCREMENTAL_TRAINER_CONFIG,
+                                 experiment_id, alpha_ideal=baseline_alpha_ideal)
+    trainer1.train()
+    trainer1.save_metrics()
+
     
     # summarize cf metrics
     print("Baseline vs SNN session metrics")
@@ -82,6 +62,12 @@ def main():
     #INFO:root:Omega Base: 0.8416872224963
     #INFO:root:Omega New: 0.9972
     #INFO:root:Omega All: 0.7397220851833579
-    
+
 if __name__ == "__main__":
-    main()
+    
+    N_EXPERIMENTS = 10 #number of experiments to run for statistical significance
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+
+    for i in range(N_EXPERIMENTS):
+        experiment_id = f"experiment_snn_{i}_{timestamp}"
+        run_experiment(experiment_id)
